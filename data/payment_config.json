@@ -1,0 +1,8 @@
+{
+  "bankName": "OPay (PayCom)",
+  "accountNumber": "9166059676",
+  "accountName": "INIOLUWA JESULEJE MICHAEL",
+  "bankCode": "999992",
+  "ussdTemplate": "*955*2*9166059676*{amount}#",
+  "instructions": "Transfer the fee directly to OPay account 9166059676 (INIOLUWA JESULEJE MICHAEL) via your OPay app, PalmPay, Kuda, or ANY commercial bank app (GTBank, Zenith, Access, First Bank, UBA). Once sent, click 'Confirm Payment with AI' to activate access instantly!"
+}

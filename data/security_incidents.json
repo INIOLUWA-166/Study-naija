@@ -1,0 +1,44 @@
+[
+  {
+    "id": "sec-1791421292816-yv1o",
+    "userId": "user-student-demo",
+    "userName": "Chukwuebuka Obi",
+    "userEmail": "student@studynaija.ng",
+    "offenseType": "proctoring_violation",
+    "severity": "minor",
+    "details": "CBT Exam Hall Window Violation: Student switched tabs / minimized exam window 3 times during official timed exam session. Flagged as unranked.",
+    "evidence": "Tab Switches: 3, Violations: true",
+    "actionTaken": "warned",
+    "detectedBy": "Admin Sentinel AI v4.0",
+    "timestamp": "2026-10-08T01:01:32.816Z",
+    "status": "active"
+  },
+  {
+    "id": "sec-1791419628984-sv40",
+    "userId": "user-student-demo",
+    "userName": "Chukwuebuka Obi",
+    "userEmail": "student@studynaija.ng",
+    "offenseType": "proctoring_violation",
+    "severity": "minor",
+    "details": "CBT Exam Hall Window Violation: Student switched tabs / minimized exam window 3 times during official timed exam session. Flagged as unranked.",
+    "evidence": "Tab Switches: 3, Violations: true",
+    "actionTaken": "warned",
+    "detectedBy": "Admin Sentinel AI v4.0",
+    "timestamp": "2026-10-08T00:33:48.984Z",
+    "status": "active"
+  },
+  {
+    "id": "sec-1790631017701-baxe",
+    "userName": "Anonymous Student / IP",
+    "userEmail": "unauthenticated@client.ip",
+    "offenseType": "payload_injection",
+    "severity": "critical",
+    "details": "Malicious SQLi / XSS payload injection attempt intercepted by Admin Sentinel AI.",
+    "evidence": "test; DROP TABLE users;--",
+    "actionTaken": "banned_permanently",
+    "detectedBy": "Admin Sentinel AI v4.0",
+    "timestamp": "2026-09-28T21:30:17.701Z",
+    "ipAddress": "127.0.0.1",
+    "status": "active"
+  }
+]

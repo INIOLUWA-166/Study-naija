@@ -1,0 +1,26 @@
+[
+  {
+    "id": "SNJ-OPAY-DEMO-01",
+    "reference": "SNJ-OPAY-DEMO-01",
+    "userId": "user-student-1",
+    "userName": "Fatima Bello",
+    "userEmail": "student@studynaija.ng",
+    "userPhone": "08012345678",
+    "planId": "medium",
+    "planName": "Medium Pack (JAMB & WAEC CBT 2027)",
+    "amount": 10000,
+    "paymentMethod": "opay",
+    "bankName": "OPay (PayCom)",
+    "accountNumber": "9166059676",
+    "accountName": "INIOLUWA JESULEJE MICHAEL",
+    "senderAccountName": "Fatima Bello",
+    "senderBank": "OPay App",
+    "status": "approved",
+    "aiAuditNotes": "AI Audit: Student logged payment of ₦10,000 for Medium Pack from Fatima Bello via OPay App. Queued for Inioluwa to confirm credit on OPay (9166059676).",
+    "aiVerifiedBy": "StudyNaija AI Audit Reconciler",
+    "createdAt": 1789739305124,
+    "submittedAt": 1789739605124,
+    "approvedAt": 1789740871066,
+    "approvedBy": "INIOLUWA JESULEJE MICHAEL"
+  }
+]

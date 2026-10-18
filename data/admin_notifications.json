@@ -1,0 +1,64 @@
+[
+  {
+    "id": "notif-1791421292817-f6e5t",
+    "type": "system",
+    "title": "🚨 Sentinel AI SUSPENDED Chukwuebuka Obi: PROCTORING VIOLATION",
+    "message": "Admin Sentinel AI has automatically detected and executed sanctions on a threat:\n\n• Offender: Chukwuebuka Obi (student@studynaija.ng)\n• Offense: proctoring_violation\n• Severity: MINOR\n• Disciplinary Action: WARNED\n• Evidence: Tab Switches: 3, Violations: true\n• Summary: CBT Exam Hall Window Violation: Student switched tabs / minimized exam window 3 times during official timed exam session. Flagged as unranked.",
+    "timestamp": "2026-10-08T01:01:32.817Z",
+    "read": false,
+    "emailSentTo": "luvkidjaja@gmail.com",
+    "metadata": {
+      "incidentId": "sec-1791421292816-yv1o",
+      "offender": "Chukwuebuka Obi",
+      "email": "student@studynaija.ng",
+      "action": "warned",
+      "evidence": "Tab Switches: 3, Violations: true"
+    }
+  },
+  {
+    "id": "notif-1791419628984-fwio6",
+    "type": "system",
+    "title": "🚨 Sentinel AI SUSPENDED Chukwuebuka Obi: PROCTORING VIOLATION",
+    "message": "Admin Sentinel AI has automatically detected and executed sanctions on a threat:\n\n• Offender: Chukwuebuka Obi (student@studynaija.ng)\n• Offense: proctoring_violation\n• Severity: MINOR\n• Disciplinary Action: WARNED\n• Evidence: Tab Switches: 3, Violations: true\n• Summary: CBT Exam Hall Window Violation: Student switched tabs / minimized exam window 3 times during official timed exam session. Flagged as unranked.",
+    "timestamp": "2026-10-08T00:33:48.984Z",
+    "read": false,
+    "emailSentTo": "luvkidjaja@gmail.com",
+    "metadata": {
+      "incidentId": "sec-1791419628984-sv40",
+      "offender": "Chukwuebuka Obi",
+      "email": "student@studynaija.ng",
+      "action": "warned",
+      "evidence": "Tab Switches: 3, Violations: true"
+    }
+  },
+  {
+    "id": "notif-1790631017702-i38n0",
+    "type": "system",
+    "title": "🚨 Sentinel AI BANNED Anonymous Student / IP: PAYLOAD INJECTION",
+    "message": "Admin Sentinel AI has automatically detected and executed sanctions on a threat:\n\n• Offender: Anonymous Student / IP (unauthenticated@client.ip)\n• Offense: payload_injection\n• Severity: CRITICAL\n• Disciplinary Action: BANNED PERMANENTLY\n• Evidence: test; DROP TABLE users;--\n• Summary: Malicious SQLi / XSS payload injection attempt intercepted by Admin Sentinel AI.",
+    "timestamp": "2026-09-28T21:30:17.702Z",
+    "read": false,
+    "emailSentTo": "luvkidjaja@gmail.com",
+    "metadata": {
+      "incidentId": "sec-1790631017701-baxe",
+      "offender": "Anonymous Student / IP",
+      "email": "unauthenticated@client.ip",
+      "action": "banned_permanently",
+      "evidence": "test; DROP TABLE users;--"
+    }
+  },
+  {
+    "id": "notif-1790630376440-mq3pp",
+    "type": "monthly_winners",
+    "title": "🏆 New Monthly Winners: September 2026 Championship Season",
+    "message": "The Top 5 winning students for September 2026 Championship Season are now listed on your Admin Portal!\n\nWhen each student submits their phone number, you will receive an alert to send their airtime recharge.",
+    "timestamp": "2026-09-28T21:19:36.440Z",
+    "read": false,
+    "emailSentTo": "luvkidjaja@gmail.com",
+    "metadata": {
+      "seasonKey": "2026-09",
+      "seasonTitle": "September 2026 Championship Season",
+      "count": 5
+    }
+  }
+]

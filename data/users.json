@@ -1,0 +1,171 @@
+[
+  {
+    "id": "user-admin-inioluwa",
+    "name": "INIOLUWA JESULEJE MICHAEL",
+    "email": "luvkidjaja@gmail.com",
+    "phone": "9166059676",
+    "passwordHash": "$2b$10$HthISPzSgav5b86JNIKzDefNo86j11rVvGiHHDff.cJjsh2UpwI9K",
+    "role": "admin",
+    "educationLevel": "tertiary",
+    "targetExam": "BOTH",
+    "premiumPlan": "premium",
+    "premiumExpiresAt": "2037-12-31T23:59:59.999Z",
+    "createdAt": "2026-09-18T14:14:19.357Z",
+    "stats": {
+      "questionsAnswered": 0,
+      "averageScore": 0,
+      "bestScore": 0,
+      "weakestSubject": "None"
+    },
+    "aiTutorQueriesUsed": 2,
+    "aiTutorLastUsedDate": "2026-10-06",
+    "integrityScore": 100,
+    "verifiedSession": true,
+    "totalTabSwitches": 0,
+    "flaggedExamsCount": 0,
+    "verifiedExamsCount": 4,
+    "welcomeEmailSent": true,
+    "welcomeEmailSentAt": "2026-10-11T15:23:43.179Z"
+  },
+  {
+    "id": "user-admin-1",
+    "name": "Admin StudyNaija",
+    "email": "admin@studynaija.ng",
+    "phone": "08000000001",
+    "passwordHash": "$2b$10$RUAIM4/dEkHz.MRjs/Aq4.LU2hX5kpCFVbjbfSpG0I3QILcM7cJk.",
+    "role": "admin",
+    "educationLevel": "secondary",
+    "targetExam": "BOTH",
+    "premiumPlan": "premium",
+    "premiumExpiresAt": "2037-12-31T23:59:59.999Z",
+    "createdAt": "2026-09-13T00:29:35.235Z",
+    "stats": {
+      "questionsAnswered": 0,
+      "averageScore": 0,
+      "bestScore": 0,
+      "weakestSubject": "None"
+    },
+    "aiTutorQueriesUsed": 4,
+    "aiTutorLastUsedDate": "2026-10-02",
+    "integrityScore": 100,
+    "verifiedSession": true,
+    "totalTabSwitches": 0,
+    "flaggedExamsCount": 0,
+    "verifiedExamsCount": 4
+  },
+  {
+    "id": "user-student-demo",
+    "name": "Chukwuebuka Obi",
+    "email": "student@studynaija.ng",
+    "phone": "08012345678",
+    "passwordHash": "$2b$10$sbFPcuHF4UXGSYwU1FDk4u.rg2DfMn/C1WAQnsKxNU7UweSMR/f52",
+    "role": "student",
+    "educationLevel": "secondary",
+    "targetExam": "JAMB",
+    "targetCourse": "Medicine & Surgery, UNILAG",
+    "premiumPlan": "free",
+    "premiumExpiresAt": null,
+    "createdAt": "2026-09-13T21:19:36.437Z",
+    "stats": {
+      "questionsAnswered": 91,
+      "averageScore": 18,
+      "bestScore": 88,
+      "weakestSubject": "Mathematics"
+    },
+    "aiTutorQueriesUsed": 1,
+    "aiTutorLastUsedDate": "2026-10-08",
+    "securityStrikes": 2,
+    "securityFlagHistory": [
+      {
+        "offense": "proctoring_violation",
+        "date": "2026-10-08T01:01:32.816Z",
+        "action": "warned",
+        "severity": "minor"
+      },
+      {
+        "offense": "proctoring_violation",
+        "date": "2026-10-08T00:33:48.984Z",
+        "action": "warned",
+        "severity": "minor"
+      }
+    ],
+    "totalTabSwitches": 3,
+    "verifiedExamsCount": 2,
+    "integrityScore": 71,
+    "verifiedSession": false,
+    "flaggedExamsCount": 1
+  },
+  {
+    "id": "user-1790957541858-x8b3u",
+    "name": "DOLAPO ESTHER MICHEAL",
+    "email": "inio95562@gmail.com",
+    "phone": "07066905357",
+    "passwordHash": "$2b$10$lPUOV1MgYdt1fWskGFUp.uNcvg0D77ooOlq9AC3ilya0BlVJub3UK",
+    "role": "student",
+    "educationLevel": "secondary",
+    "targetExam": "JAMB",
+    "targetCourse": "",
+    "premiumPlan": "free",
+    "premiumExpiresAt": null,
+    "createdAt": "2026-10-02T16:12:21.858Z",
+    "stats": {
+      "questionsAnswered": 0,
+      "averageScore": 0,
+      "bestScore": 0,
+      "weakestSubject": "Mathematics"
+    },
+    "aiTutorQueriesUsed": 1,
+    "aiTutorLastUsedDate": "2026-10-07",
+    "integrityScore": 100,
+    "verifiedSession": true,
+    "totalTabSwitches": 0,
+    "flaggedExamsCount": 0,
+    "verifiedExamsCount": 4
+  },
+  {
+    "id": "user-1791731751159-bgz79",
+    "name": "INI OLUWA",
+    "email": "ini095212@gmail.com",
+    "phone": "09165328951",
+    "passwordHash": "$2b$10$yyGp8F5popEtyoQwd7yoj.4uOC5Fj9Yq2YAl7kXVsGqtYh888gwre",
+    "role": "student",
+    "educationLevel": "primary",
+    "targetExam": "COMMON_ENTRANCE",
+    "targetCourse": "",
+    "premiumPlan": "free",
+    "premiumExpiresAt": null,
+    "createdAt": "2026-10-11T15:15:51.159Z",
+    "stats": {
+      "questionsAnswered": 0,
+      "averageScore": 0,
+      "bestScore": 0,
+      "weakestSubject": "Primary Mathematics"
+    },
+    "integrityScore": 100,
+    "verifiedSession": true,
+    "totalTabSwitches": 0,
+    "flaggedExamsCount": 0,
+    "verifiedExamsCount": 4
+  },
+  {
+    "id": "user-1791732230770-4wecy",
+    "name": "Adebayo Ogunlesi",
+    "email": "adebayo.ogunlesi@example.com",
+    "passwordHash": "$2b$10$dhYKp87yfBA0PU2HdJvoruM/3To.fPWDGM3goaMCJock1OFfZ6gNO",
+    "role": "student",
+    "educationLevel": "secondary",
+    "targetExam": "JAMB",
+    "targetCourse": "",
+    "premiumPlan": "free",
+    "premiumExpiresAt": null,
+    "createdAt": "2026-10-11T15:23:50.770Z",
+    "stats": {
+      "questionsAnswered": 0,
+      "averageScore": 0,
+      "bestScore": 0,
+      "weakestSubject": "Mathematics"
+    },
+    "welcomeEmailSent": true,
+    "welcomeEmailSentAt": "2026-10-11T15:23:50.773Z"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "msg_welcome_ai",
+    "channelId": "general",
+    "userId": "system_sabiguard",
+    "userName": "SabiGuard AI Moderator",
+    "userEmail": "safety@studynaija.ng",
+    "targetExam": "ALL",
+    "content": "🇳🇬 Welcome to the StudyNaija Student Discussion Hub! I monitor this space 24/7 to keep it free from profanity, toxic speech, and exam malpractice scams. Share past question tips, ask tricky questions, and support each other on the road to tertiary admissions!",
+    "createdAt": "2026-09-24T00:26:45.524Z",
+    "likes": 0,
+    "likedBy": [],
+    "isAiPinned": true,
+    "isAiAssistant": true,
+    "tags": [
+      "CommunityGuidelines",
+      "SafetyFirst"
+    ],
+    "moderationStatus": "approved",
+    "aiModerationTag": "Verified Academic Welcome"
+  }
+]

@@ -1,0 +1,78 @@
+{
+  "id": "/",
+  "name": "StudyNaija - JAMB & WAEC CBT Exam Prep",
+  "short_name": "StudyNaija",
+  "description": "Comprehensive Nigerian JAMB UTME & WAEC SSCE examination preparation platform featuring 10,000+ past questions, 8-key keyboard simulation, CBT scientific calculator, 1v1 battle arena, and offline study mode.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#064e3b",
+  "theme_color": "#047857",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": [
+    "education",
+    "books",
+    "reference",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Full CBT Mock Exam",
+      "short_name": "CBT Mock",
+      "description": "Take timed 4-subject JAMB UTME mock with official 8-key navigation",
+      "url": "/?view=mock-exam",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Practice Past Questions",
+      "short_name": "Practice",
+      "description": "Solve verified past questions with detailed examiner solutions",
+      "url": "/?view=practice",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "CBT Scientific Calculator",
+      "short_name": "Calculator",
+      "description": "Approved STEM calculator with trigonometry and physics constants",
+      "url": "/?view=calculator",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Champions League Tournament",
+      "short_name": "Champions",
+      "description": "Compete for ₦9,500 monthly scholar cash prizes",
+      "url": "/?view=tournament",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=ng.studynaija.cbt",
+      "id": "ng.studynaija.cbt"
+    }
+  ],
+  "prefer_related_applications": false
+}
