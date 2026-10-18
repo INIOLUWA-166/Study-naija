@@ -865,7 +865,6 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
             <button
               onClick={() => {
                 setActiveTab('arena');
-                window.scrollTo({ top: 400, behavior: 'smooth' });
               }}
               className="w-full py-1.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 text-slate-950 font-black text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
             >

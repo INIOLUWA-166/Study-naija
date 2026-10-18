@@ -95,31 +95,50 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   const [explainingMessageId, setExplainingMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const isInitialLoadRef = useRef<boolean>(true);
 
-  const loadMessages = async (channel: CommunityChannel, search?: string) => {
+  // Safely scroll ONLY within the chat box container, preventing the whole webpage from jumping
+  const scrollToChatBottom = (smooth = true) => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    }
+  };
+
+  const loadMessages = async (channel: CommunityChannel, search?: string, isBackgroundPoll = false) => {
     try {
-      setLoading(true);
+      if (!isBackgroundPoll) {
+        setLoading(true);
+      }
       const data = await api.getCommunityMessages(channel, search);
       setMessages(data.messages || []);
+      
+      // Only auto-scroll to bottom on initial user-driven channel load
+      if (!isBackgroundPoll && isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+        setTimeout(() => scrollToChatBottom(false), 50);
+      }
     } catch (err) {
       console.error('Failed to load community messages:', err);
     } finally {
-      setLoading(false);
+      if (!isBackgroundPoll) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadMessages(activeChannel, searchQuery);
-    // Polling interval for live student discussion
+    isInitialLoadRef.current = true;
+    loadMessages(activeChannel, searchQuery, false);
+    // Polling interval for live student discussion: safe background poll that DOES NOT jump scroll
     const interval = setInterval(() => {
-      loadMessages(activeChannel, searchQuery);
-    }, 6000);
+      loadMessages(activeChannel, searchQuery, true);
+    }, 8000);
     return () => clearInterval(interval);
   }, [activeChannel, searchQuery]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
 
   const handleSendMessage = async (customText?: string) => {
     const textToSend = (customText || inputText).trim();
@@ -145,8 +164,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
       setInputText('');
       setReplyingTo(null);
-      // Reload immediately
+      // Reload immediately and scroll to sent message inside container
       await loadMessages(activeChannel, searchQuery);
+      setTimeout(() => scrollToChatBottom(true), 80);
     } catch (err: any) {
       // Caught by SabiGuard AI Moderator
       if (err.moderation) {
@@ -388,7 +408,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           )}
 
           {/* Messages Stream Container */}
-          <div className="rounded-3xl bg-slate-900 border border-slate-800 p-4 sm:p-6 min-h-[460px] max-h-[560px] overflow-y-auto space-y-4">
+          <div ref={chatContainerRef} className="rounded-3xl bg-slate-900 border border-slate-800 p-4 sm:p-6 min-h-[460px] max-h-[560px] overflow-y-auto space-y-4">
             
             {loading && messages.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center space-y-3 text-slate-400">

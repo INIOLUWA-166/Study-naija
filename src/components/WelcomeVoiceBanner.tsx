@@ -263,7 +263,6 @@ export const WelcomeVoiceBanner: React.FC<WelcomeVoiceBannerProps> = ({ user, on
                 placeholder="Enter your first name..."
                 maxLength={20}
                 className="px-3 py-2 text-xs rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 w-full sm:w-48"
-                autoFocus
               />
               <button
                 type="submit"

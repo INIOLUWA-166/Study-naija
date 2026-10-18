@@ -112,6 +112,14 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
 
   const genres = ['All', 'Mystery', 'Sci-Fi', 'Folklore', 'Thriller', 'Historical STEM', 'Campus Comedy'];
 
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const storiesPerPage = 12;
+
+  // Reset page when genre or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedGenre, searchQuery]);
+
   const filteredStories = STORY_BOOKS.filter(story => {
     const matchesGenre = selectedGenre === 'All' || story.genre === selectedGenre;
     const matchesQuery = !searchQuery || 
@@ -121,6 +129,9 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
       story.moralLesson.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesGenre && matchesQuery;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredStories.length / storiesPerPage));
+  const paginatedStories = filteredStories.slice((currentPage - 1) * storiesPerPage, currentPage * storiesPerPage);
 
   // Open story reader
   const handleOpenStory = (story: StoryBook, startChapter = 0) => {
@@ -135,7 +146,6 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
     setQuizAnswers({});
     setQuizSubmitted(false);
     setSelectedVocabWord(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCloseStory = () => {
@@ -430,11 +440,21 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 3. STORIES GALLERY GRID */}
+      {/* 3. STORIES GALLERY GRID (PAGINATED 500-STORY CATALOG) */}
       {/* ========================================================================= */}
       {!activeStory && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStories.map(story => {
+        <div className="space-y-6">
+          <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+            <span>
+              Showing {Math.min((currentPage - 1) * storiesPerPage + 1, filteredStories.length)} – {Math.min(currentPage * storiesPerPage, filteredStories.length)} of {filteredStories.length} Nigerian Stories
+            </span>
+            <span>
+              Page {currentPage} of {totalPages}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paginatedStories.map(story => {
             const isBookmarked = bookmarkedIds.includes(story.id);
             const isCompleted = completedStories.includes(story.id);
 
@@ -540,6 +560,57 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
             );
           })}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t border-slate-800 text-xs">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold transition flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed border border-slate-800"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Previous Page</span>
+            </button>
+
+            {/* Page number indicators */}
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {Array.from({ length: Math.min(7, totalPages) }, (_, idx) => {
+                let pageNum = idx + 1;
+                if (totalPages > 7) {
+                  if (currentPage > 4 && currentPage < totalPages - 2) {
+                    pageNum = currentPage - 3 + idx;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 6 + idx;
+                  }
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-8 h-8 rounded-lg font-mono font-bold transition cursor-pointer text-xs ${
+                      currentPage === pageNum
+                        ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold transition flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed border border-slate-800"
+            >
+              <span>Next Page</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
       )}
 
       {/* ========================================================================= */}
@@ -814,7 +885,6 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                     onClick={() => {
                       setActiveChapterIdx(prev => prev - 1);
                       if (isSpeaking) handleStopSpeech();
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
                   >
@@ -830,7 +900,6 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                     onClick={() => {
                       setActiveChapterIdx(prev => prev + 1);
                       if (isSpeaking) handleStopSpeech();
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     className="px-5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 text-white hover:bg-emerald-500 transition flex items-center gap-1.5 cursor-pointer shadow-md"
                   >
@@ -842,7 +911,6 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                     onClick={() => {
                       setQuizActive(true);
                       if (isSpeaking) handleStopSpeech();
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 transition flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105"
                   >

@@ -417,13 +417,20 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     }
   }, [messages, user?.id]);
 
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages.length, isLoading]);
 
   // Sync voice state
   useEffect(() => {
@@ -1049,6 +1056,7 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
         {/* WHATSAPP CHAT CANVAS WALLPAPER & SCROLL CONTAINER */}
         {/* ========================================================================= */}
         <div 
+          ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3.5 scrollbar-thin relative"
           style={{
             backgroundImage: `radial-gradient(#075e54 0.45px, transparent 0.45px), radial-gradient(#128c7e 0.45px, #efeae2 0.45px)`,

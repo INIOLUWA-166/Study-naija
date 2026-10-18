@@ -1,10 +1,21 @@
 @import "tailwindcss";
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+    touch-action: pan-y pinch-zoom;
+    overflow-anchor: auto;
+  }
   body {
     background-color: #030712;
     color: #f8fafc;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+    touch-action: pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
+    overflow-anchor: auto;
   }
 }
 
@@ -271,5 +282,28 @@ html.light-theme {
 
 .light-theme ::-webkit-scrollbar-thumb:hover {
   background: #0284c7;
+}
+
+/* -------------------------------------------------------------
+   PAGE STABILITY & MOVABLE CANVAS UTILITIES
+   ------------------------------------------------------------- */
+/* Prevents unexpected layout jitter and scroll jumping */
+.page-stable {
+  overflow-anchor: auto !important;
+  scroll-padding-top: 5rem;
+}
+
+/* Fluid movable canvas for touch, drag, and trackpad navigation */
+.movable-viewport {
+  touch-action: pan-y pinch-zoom;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Touch and mouse draggable items */
+.touch-draggable {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 

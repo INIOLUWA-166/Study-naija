@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { AuthGateway } from './components/AuthGateway';
@@ -296,12 +297,16 @@ export default function App() {
         setTipsSlug(undefined);
       }
     } else if (view === 'tournament') {
-      setCurrentView('tournament');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (currentView !== 'tournament') {
+        setCurrentView('tournament');
+        window.scrollTo(0, 0);
+      }
       return;
     }
-    setCurrentView(view);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (currentView !== view) {
+      setCurrentView(view);
+      window.scrollTo(0, 0);
+    }
   };
 
   const handleOpenAuth = (mode: 'login' | 'signup' = 'login') => {
@@ -572,162 +577,194 @@ export default function App() {
           />
         )}
 
-        {/* Dynamic Views */}
-        {currentView === 'home' && (
-          <HomeView
-            subjects={subjects}
-            user={user}
-            activeExamFilter={activeExamFilter}
-            setActiveExamFilter={setActiveExamFilter}
-            onNavigate={handleNavigate}
-            onOpenAuth={handleOpenAuth}
-            onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
-            onOpenCalculator={() => setIsGlobalCalculatorOpen(true)}
-            onSelectExamFilter={filter => {
-              setActiveExamFilter(filter);
-              handleNavigate('subjects');
-            }}
-          />
-        )}
+        {/* Dynamic Views with Framer Motion Page Transitions */}
+        <AnimatePresence mode="wait">
+          {currentView === 'home' && (
+            <motion.div key="home" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <HomeView
+                subjects={subjects}
+                user={user}
+                activeExamFilter={activeExamFilter}
+                setActiveExamFilter={setActiveExamFilter}
+                onNavigate={handleNavigate}
+                onOpenAuth={handleOpenAuth}
+                onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
+                onOpenCalculator={() => setIsGlobalCalculatorOpen(true)}
+                onSelectExamFilter={filter => {
+                  setActiveExamFilter(filter);
+                  handleNavigate('subjects');
+                }}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'subjects' && (
-          <SubjectsView
-            subjects={subjects}
-            user={user}
-            activeExamFilter={activeExamFilter}
-            onStartPractice={(subId, topic) => handleNavigate('practice', { subjectId: subId, topic })}
-            onStartMock={subId => handleNavigate('mock-exam', { subjectId: subId })}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'subjects' && (
+            <motion.div key="subjects" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <SubjectsView
+                subjects={subjects}
+                user={user}
+                activeExamFilter={activeExamFilter}
+                onStartPractice={(subId, topic) => handleNavigate('practice', { subjectId: subId, topic })}
+                onStartMock={subId => handleNavigate('mock-exam', { subjectId: subId })}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'practice' && (
-          <PracticeView
-            initialSubjectId={practiceParams.subjectId}
-            initialTopic={practiceParams.topic}
-            subjects={subjects}
-            user={user}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'practice' && (
+            <motion.div key="practice" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <PracticeView
+                initialSubjectId={practiceParams.subjectId}
+                initialTopic={practiceParams.topic}
+                subjects={subjects}
+                user={user}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'search-pad' && (
-          <SearchPadView
-            user={user}
-            subjects={subjects}
-            onStartPractice={(subId, topic) => handleNavigate('practice', { subjectId: subId, topic })}
-            onOpenAITutor={(topic, subjectName) => handleNavigate('ai-tutor', { topic, subject: subjectName })}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'search-pad' && (
+            <motion.div key="search-pad" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <SearchPadView
+                user={user}
+                subjects={subjects}
+                onStartPractice={(subId, topic) => handleNavigate('practice', { subjectId: subId, topic })}
+                onOpenAITutor={(topic, subjectName) => handleNavigate('ai-tutor', { topic, subject: subjectName })}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'ai-tutor' && (
-          <AITutorView
-            user={user}
-            subjects={subjects}
-            initialTopic={tutorParams.topic}
-            initialSubject={tutorParams.subject}
-            onNavigate={handleNavigate}
-            onRefreshUser={loadInitialData}
-          />
-        )}
+          {currentView === 'ai-tutor' && (
+            <motion.div key="ai-tutor" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <AITutorView
+                user={user}
+                subjects={subjects}
+                initialTopic={tutorParams.topic}
+                initialSubject={tutorParams.subject}
+                onNavigate={handleNavigate}
+                onRefreshUser={loadInitialData}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'mock-exam' && (
-          <MockExamView
-            subjects={subjects}
-            user={user}
-            onNavigate={handleNavigate}
-            preferredSubject={practiceParams.subjectId}
-          />
-        )}
+          {currentView === 'mock-exam' && (
+            <motion.div key="mock-exam" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <MockExamView
+                subjects={subjects}
+                user={user}
+                onNavigate={handleNavigate}
+                preferredSubject={practiceParams.subjectId}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'dashboard' && (
-          <DashboardView
-            user={user}
-            onNavigate={handleNavigate}
-            onOpenAuth={() => handleOpenAuth('login')}
-            onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
-            onOpenAITutor={(topic, subject) => handleNavigate('ai-tutor', { topic, subject })}
-            onOpenProfile={() => setIsProfileOpen(true)}
-            onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
-            initialTab={dashboardInitialTab}
-          />
-        )}
+          {currentView === 'dashboard' && (
+            <motion.div key="dashboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <DashboardView
+                user={user}
+                onNavigate={handleNavigate}
+                onOpenAuth={() => handleOpenAuth('login')}
+                onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
+                onOpenAITutor={(topic, subject) => handleNavigate('ai-tutor', { topic, subject })}
+                onOpenProfile={() => setIsProfileOpen(true)}
+                onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
+                initialTab={dashboardInitialTab}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'leaderboard' && (
-          <DashboardView
-            user={user}
-            onNavigate={handleNavigate}
-            onOpenAuth={() => handleOpenAuth('login')}
-            onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
-            onOpenAITutor={(topic, subject) => handleNavigate('ai-tutor', { topic, subject })}
-            onOpenProfile={() => setIsProfileOpen(true)}
-            onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
-            initialTab="leaderboard"
-          />
-        )}
+          {currentView === 'leaderboard' && (
+            <motion.div key="leaderboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <DashboardView
+                user={user}
+                onNavigate={handleNavigate}
+                onOpenAuth={() => handleOpenAuth('login')}
+                onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
+                onOpenAITutor={(topic, subject) => handleNavigate('ai-tutor', { topic, subject })}
+                onOpenProfile={() => setIsProfileOpen(true)}
+                onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
+                initialTab="leaderboard"
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'arena-1v1' && (
-          <HeadToHeadArenaView
-            user={user}
-            onNavigate={handleNavigate}
-            onRefreshUser={loadInitialData}
-          />
-        )}
+          {currentView === 'arena-1v1' && (
+            <motion.div key="arena-1v1" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <HeadToHeadArenaView
+                user={user}
+                onNavigate={handleNavigate}
+                onRefreshUser={loadInitialData}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'tournament' && (
-          <TournamentView
-            user={activeUser}
-            onNavigate={handleNavigate}
-            onOpenAuth={() => handleOpenAuth('login')}
-          />
-        )}
+          {currentView === 'tournament' && (
+            <motion.div key="tournament" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <TournamentView
+                user={activeUser}
+                onNavigate={handleNavigate}
+                onOpenAuth={() => handleOpenAuth('login')}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'community' && (
-          <CommunityView
-            user={activeUser}
-            onOpenAuth={handleOpenAuth}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'community' && (
+            <motion.div key="community" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <CommunityView
+                user={activeUser}
+                onOpenAuth={handleOpenAuth}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'premium' && (
-          <PremiumView
-            user={activeUser}
-            onOpenAuth={() => handleOpenAuth('signup')}
-            onPaymentSuccess={updatedUser => {
-              setUser(updatedUser);
-            }}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'premium' && (
+            <motion.div key="premium" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <PremiumView
+                user={activeUser}
+                onOpenAuth={() => handleOpenAuth('signup')}
+                onPaymentSuccess={updatedUser => {
+                  setUser(updatedUser);
+                }}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'study-tips' && (
-          <StudyTipsView
-            user={activeUser}
-            initialSlug={tipsSlug}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'study-tips' && (
+            <motion.div key="study-tips" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <StudyTipsView
+                user={activeUser}
+                initialSlug={tipsSlug}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {(currentView === 'stories' || currentView === 'storybook' || currentView === 'storybooks') && (
-          <StoryBooksView
-            user={activeUser}
-            onNavigate={handleNavigate}
-            onUpdateUser={updatedUser => setUser(updatedUser)}
-          />
-        )}
+          {(currentView === 'stories' || currentView === 'storybook' || currentView === 'storybooks') && (
+            <motion.div key="stories" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <StoryBooksView
+                user={activeUser}
+                onNavigate={handleNavigate}
+                onUpdateUser={updatedUser => setUser(updatedUser)}
+              />
+            </motion.div>
+          )}
 
-        {currentView === 'admin' && (
-          <AdminView
-            user={activeUser}
-            subjects={subjects}
-            onOpenAuth={() => handleOpenAuth('login')}
-            onRefreshData={loadInitialData}
-            onNavigate={handleNavigate}
-            onUserUpgraded={updatedUser => setUser(updatedUser)}
-          />
-        )}
+          {currentView === 'admin' && (
+            <motion.div key="admin" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <AdminView
+                user={activeUser}
+                subjects={subjects}
+                onOpenAuth={() => handleOpenAuth('login')}
+                onRefreshData={loadInitialData}
+                onNavigate={handleNavigate}
+                onUserUpgraded={updatedUser => setUser(updatedUser)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </main>
 
