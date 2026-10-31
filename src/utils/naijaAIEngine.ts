@@ -35,6 +35,52 @@ export function generateNaijaAIResponse(
     ? previousTurns[previousTurns.length - 2]?.text?.toLowerCase() || '' 
     : '';
 
+  // Query: How to make Naija AI smarter & answer in plain, clear, understandable English
+  if (
+    (q.includes('make') && q.includes('smarter')) ||
+    (q.includes('plain') && (q.includes('english') || q.includes('understandable'))) ||
+    q.includes('how do i make naija ai') || q.includes('how to make naija ai') ||
+    q.includes('more questions like you') || q.includes('understandable english')
+  ) {
+    return `### 💡🇳🇬 How to Get the Smartest, Plain English Answers from Naija AI!
+
+Hello **${name}**! Here is how you can unlock **the absolute smartest, most detailed, and easiest-to-understand explanations** from me in plain English:
+
+---
+
+### 1. 🚀 5 Pro Tips to Get Super-Smart, Plain English Answers:
+
+#### 💡 Tip 1: Ask for "Explain in Plain English" or "Explain Like I'm 5 (ELI5)"
+Add **"in plain English"** or **"explain like I'm 5"** at the end of any complex question!
+* *Example:* *"Explain Quadratic Equations in plain simple English with a real-world example."*
+* *Example:* *"Explain how Newton's Third Law works in simple words."*
+
+#### ⚡ Tip 2: Switch to "Unrestricted AI Mode" (Top Bar Button)
+By default, Naija AI focuses on JAMB & WAEC secondary curriculum. To ask **ANY question on earth** (like advanced coding, global current affairs, cybersecurity, university courses, or business):
+1. Look at the top focus bar above this chat.
+2. Click **"🔓 Unrestricted Mode"**.
+3. You can now ask any question without curriculum limits!
+
+#### 📐 Tip 3: Ask for "Step-by-Step Workings"
+When asking Math, Physics, or Chemistry calculations, type:
+* *"Solve [equation] step-by-step showing every line of working and formula used."*
+* Naija AI will break down the problem line-by-line so you never get confused!
+
+#### 🎧 Tip 4: Listen to Audio Narration
+Tap the **"Listen (Voice Note)"** button under any response to hear Sarah or Chidi read the answer out loud in clear, easy-to-follow spoken English!
+
+#### 📰 Tip 5: For Live Real-Time News & Current Affairs, Use the "News & Fact-Checker"
+If you want live real-time web news, JAMB 2026/2027 registration dates, or cutoff marks:
+* Click **"News & Fact-Checker 📰"** in the top navigation bar or home screen to use our **Google Search Grounded Agent**!
+
+---
+
+### 🎓 Try it right now!
+Reply with any topic you are studying, like:
+* *"Explain Calculus Differentiation simply in plain English"*
+* *"Explain Python loops simply with real-life examples"*`;
+  }
+
   // =========================================================================
   // 0. RESET & DEDICATED PURE LEARNING / STUDY FOCUS MODE
   // =========================================================================

@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { Question, Subject, User } from '../types';
 import { api } from '../services/api';
+import { saveBookmarkToFirestore, removeBookmarkFromFirestore } from '../services/firebase';
 import { shuffleQuestionOptions, EXTENDED_QUESTIONS, generateFreshDrillQuestions } from '../utils/questionBank';
 import {
   createDynamicQuestionVariant,
@@ -56,6 +57,7 @@ import confetti from 'canvas-confetti';
 interface PracticeViewProps {
   initialSubjectId?: string;
   initialTopic?: string;
+  initialCustomQuestions?: Question[];
   subjects: Subject[];
   user: User | null;
   onNavigate: (view: string, extra?: any) => void;
@@ -64,6 +66,7 @@ interface PracticeViewProps {
 export const PracticeView: React.FC<PracticeViewProps> = ({
   initialSubjectId,
   initialTopic,
+  initialCustomQuestions,
   subjects,
   user,
   onNavigate
@@ -139,6 +142,17 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
     try {
       await api.toggleBookmarkQuestion(qId, res.isBookmarked);
     } catch {}
+
+    if (user?.id) {
+      if (res.isBookmarked) {
+        const found = questions.find(q => q.id === qId) || EXTENDED_QUESTIONS.find(q => q.id === qId);
+        if (found) {
+          saveBookmarkToFirestore(user.id, qId, found.subjectId || selectedSubjectId, found.question).catch(() => {});
+        }
+      } else {
+        removeBookmarkFromFirestore(user.id, qId).catch(() => {});
+      }
+    }
   };
   
   // Student-friendly usability toggles
@@ -284,8 +298,21 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   }, [selectedSubjectId, selectedTopic, selectedDifficulty]);
 
   useEffect(() => {
-    loadQuestions(false);
-  }, [selectedSubjectId, selectedTopic, selectedDifficulty]);
+    if (initialCustomQuestions && initialCustomQuestions.length > 0) {
+      setQuestions(initialCustomQuestions);
+      if (initialCustomQuestions[0]?.subjectId) {
+        setSelectedSubjectId(initialCustomQuestions[0].subjectId);
+      }
+      setCurrentIndex(0);
+      setSelectedAnswers({});
+      setRevealedQuestions({});
+      setFlaggedQuestions({});
+      setScoreCount(0);
+      setLoading(false);
+    } else {
+      loadQuestions(false);
+    }
+  }, [selectedSubjectId, selectedTopic, selectedDifficulty, initialCustomQuestions]);
 
   const handleNextBatch = () => {
     setSessionBatch(prev => prev + 1);

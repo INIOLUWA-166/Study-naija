@@ -1,3 +1,5 @@
+import { buildEngagingChapters, expandCoreStory } from './storyChapterEngine';
+
 export interface VocabularyWord {
   word: string;
   partOfSpeech: string;
@@ -51,17 +53,17 @@ const CORE_FEATURED_STORIES: StoryBook[] = [
     author: 'Engr. Adaobi Nwosu',
     authorBio: 'Renewable energy researcher from Enugu State & youth STEM advocate.',
     genre: 'Sci-Fi',
-    readingTimeMinutes: 7,
-    wordCount: 1350,
+    readingTimeMinutes: 24,
+    wordCount: 5200,
     difficulty: 'Intermediate',
     tagline: 'Ancient clay gourd acoustics meet solar power in the hills of Enugu.',
-    synopsis: 'Sixteen-year-old Adaora builds a low-frequency emergency radio receiver inside a dried yam barn calabash using crushed quartz crystals and scrap silicon. When an eerie signal from Nigeria’s orbital satellite crackles to life during a heavy thunderstorm, she must race against time to decode a storm flood anomaly that threatens all the farmlands of the South-East.',
+    synopsis: 'Sixteen-year-old Adaora builds a low-frequency emergency radio receiver inside a dried yam barn calabash using crushed quartz crystals and scrap silicon. When an eerie signal from Nigeria’s orbital satellite crackles to life during a heavy thunderstorm, she must race against time across 20 thrilling chapters to decode a storm flood anomaly that threatens all the farmlands of the South-East.',
     coverGradient: 'from-emerald-900 via-teal-950 to-slate-950',
     icon: '⚡',
-    badge: 'Solarpunk STEM',
+    badge: '20 Chapters • Solarpunk STEM',
     targetAudience: 'JAMB STEM & Science Students',
     moralLesson: 'True technological innovation begins with resourcefulness, indigenous wisdom, and the courage to question conventional limits.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Spark in the Yam Barn',
         content: `The afternoon rains in Nsukka did not fall gently; they descended like a million brass rods striking the corrugated zinc roofs of the village. Inside her grandmother’s breezy mud-brick yam barn, Adaora knelt beside a wooden workbench littered with copper windings, discarded transistor coils, and an enormous polished calabash.
@@ -109,7 +111,19 @@ The next morning, as the sun broke golden over the green hills of Nsukka, a conv
 
 "In Nigeria, sir, wisdom has always lived inside nature. We only needed the curiosity to tune in."`
       }
-    ],
+    ], 20, {
+      storyId: 'quantum-calabash-nsukka',
+      title: 'The Quantum Calabash of Nsukka',
+      protagonist: 'Adaora',
+      companion: 'Emeka',
+      mentor: 'Professor Chinedu',
+      antagonist: 'Director General of NASRDA',
+      setting: 'Nsukka',
+      landmark: 'the rolling hills of Nsukka',
+      genre: 'Sci-Fi',
+      centralArtifactOrHook: 'the piezoelectric quantum calabash receiver',
+      moralLesson: 'True technological innovation begins with resourcefulness, indigenous wisdom, and the courage to question conventional limits.'
+    }),
     vocabulary: [
       {
         word: 'Piezoelectric',
@@ -193,17 +207,17 @@ The next morning, as the sun broke golden over the green hills of Nsukka, a conv
     author: 'Dr. Funmilayo Adeleke',
     authorBio: 'Former Dean of Student Affairs & Literature Professor at University of Ibadan.',
     genre: 'Mystery',
-    readingTimeMinutes: 8,
-    wordCount: 1520,
+    readingTimeMinutes: 28,
+    wordCount: 6100,
     difficulty: 'Intermediate',
     tagline: 'Ghostly music, an exam week panic, and a clever investigation at University of Ibadan.',
-    synopsis: 'In the oldest residential hall at the University of Ibadan, eerie nocturnal organ chords and flickering blue phantom lights have panicked students on the eve of their final semester exams. Two roommates—Segun, a skeptical mechanical engineering student, and Femi, a keen history scholar—refuse to believe in ghosts and set a trap that unmasks a high-stakes campus conspiracy.',
+    synopsis: 'In the oldest residential hall at the University of Ibadan, eerie nocturnal organ chords and flickering blue phantom lights have panicked students on the eve of their final semester exams. Two roommates—Segun, a skeptical mechanical engineering student, and Femi, a keen history scholar—refuse to believe in ghosts and set a trap across 24 gripping chapters that unmasks a high-stakes campus conspiracy.',
     coverGradient: 'from-indigo-950 via-slate-900 to-purple-950',
     icon: '🕵️‍♂️',
-    badge: 'Campus Whodunit',
+    badge: '24 Chapters • Campus Whodunit',
     targetAudience: 'University & Secondary School Scholars',
     moralLesson: 'Superstition flees in the face of logical scrutiny; critical thinking and integrity are a student’s greatest shield.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Haunting in the Belfry',
         content: `Examinations at the University of Ibadan were notoriously demanding, but in June of 1998, a terror far more sinister than Organic Chemistry haunted the occupants of Independence Hall—popularly known as Hall 4.
@@ -254,7 +268,19 @@ As Segun walked into his Mechanical Engineering finals that afternoon, Biodun ru
 
 Segun tapped his forehead with a confident grin. "Superstition looks for monsters in the shadows, my friend. Science turns on the light."`
       }
-    ],
+    ], 24, {
+      storyId: 'midnight-mystery-hall-4',
+      title: 'The Midnight Organ of Hall 4',
+      protagonist: 'Segun',
+      companion: 'Femi',
+      mentor: 'Dean of Science',
+      antagonist: 'Dr. Anthony Nwosu',
+      setting: 'University of Ibadan',
+      landmark: 'Independence Hall (Hall 4) belfry tower',
+      genre: 'Mystery',
+      centralArtifactOrHook: 'the locked belfry organ and examination vault key',
+      moralLesson: 'Superstition flees in the face of logical scrutiny; critical thinking and integrity are a student’s greatest shield.'
+    }),
     vocabulary: [
       {
         word: 'Belfry',
@@ -338,17 +364,17 @@ Segun tapped his forehead with a confident grin. "Superstition looks for monster
     author: 'Chief Babatunde Alabi',
     authorBio: 'Renowned Yoruba folklorist, cultural dramatist, and oral history custodian.',
     genre: 'Folklore',
-    readingTimeMinutes: 6,
-    wordCount: 1180,
+    readingTimeMinutes: 15,
+    wordCount: 2950,
     difficulty: 'Accessible',
     tagline: 'The cunning tortoise learns that wisdom belongs to everyone, not to one greedy shell.',
-    synopsis: 'During a severe drought across the animal kingdom of Ilu-Eranko, Ijapa the tortoise concocts a scheme to hoard all the wisdom proverbs of the world in an earthen pot so that kings and animals will pay him heaps of cowries for counsel. But when he tries to climb the great Iroko tree, a small child and a tiny bird teach him a lesson he will carry on his cracked shell forever.',
+    synopsis: 'During a severe drought across the animal kingdom of Ilu-Eranko, Ijapa the tortoise concocts a scheme across 10 hilarious, proverb-rich chapters to hoard all the wisdom proverbs of the world in an earthen pot so that kings and animals will pay him heaps of cowries for counsel. But when he tries to climb the great Iroko tree, a small child and a tiny bird teach him a lesson he will carry on his cracked shell forever.',
     coverGradient: 'from-amber-950 via-yellow-950 to-emerald-950',
     icon: '🐢',
-    badge: 'Classic Nigerian Fable',
+    badge: '10 Chapters • Classic Nigerian Fable',
     targetAudience: 'All Primary, Secondary & Literature Students',
     moralLesson: 'No single human or tortoise possesses all knowledge; wisdom is communal, and pride always precedes a stumble.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Greedy Plan of Ijapa',
         content: `In the ancient days before the sun wore a veil of smoke, famine visited Ilu-Eranko, the city of animals. The streams refused to sing, the cassava roots shrank like dry stones, and King Lion convened the animal assembly under the shade of the ancient Baobab tree.
@@ -407,7 +433,19 @@ As for Ijapa, he was so startled by the explosion that he tumbled backward off t
 
 His smooth, polished shell fractured into dozens of interlocking plates. Yannibo had to spend three days gluing his shell back together with boiled tree resin and palm oil, which is why to this very day, every tortoise walks with a patched, cracked shell and stays close to the ground, reminding the world that no single being can ever monopolize the wisdom of humanity.`
       }
-    ],
+    ], 10, {
+      storyId: 'ijapa-river-of-wisdom',
+      title: 'Ìjàpá and the River of Wisdom',
+      protagonist: 'Ìjàpá the Tortoise',
+      companion: 'Aja the Dog',
+      mentor: 'Oba Alaye',
+      antagonist: 'Erin the Elephant',
+      setting: 'the ancient forest of Iroko',
+      landmark: 'the Sacred River of Mirrored Waters',
+      genre: 'Folklore',
+      centralArtifactOrHook: 'the unbroken clay pot of communal wisdom',
+      moralLesson: 'No single human or tortoise possesses all knowledge; wisdom is communal, and pride always precedes a stumble.'
+    }),
     vocabulary: [
       {
         word: 'Monopolize',
@@ -491,17 +529,17 @@ His smooth, polished shell fractured into dozens of interlocking plates. Yannibo
     author: 'Tobi Babalola',
     authorBio: 'Lagos-based investigative journalist and urban narrative author.',
     genre: 'Thriller',
-    readingTimeMinutes: 9,
-    wordCount: 1650,
+    readingTimeMinutes: 38,
+    wordCount: 8640,
     difficulty: 'Intermediate',
     tagline: 'A rain-slicked expressway, a lost folder, and four strangers racing midnight in Lagos.',
-    synopsis: 'Seventeen-year-old Damilola has just ninety minutes to deliver his original JAMB registration slip and national merit portfolio to the university registrar’s office on Lagos Island. Stranded in a torrential deluge at Ikorodu bus stop, he boards the last rickety yellow Danfo bus alongside an eccentric retired train driver, a frantic medical intern, and a sharp conductor named Agbero King.',
+    synopsis: 'Seventeen-year-old Damilola has just ninety minutes to deliver his original JAMB registration slip and national merit portfolio to the university registrar’s office on Lagos Island. Stranded in a torrential deluge at Ikorodu bus stop, he boards the last rickety yellow Danfo bus across 27 thrilling chapters alongside an eccentric retired train driver, a frantic medical intern, and a sharp conductor named Agbero King.',
     coverGradient: 'from-amber-900 via-stone-900 to-yellow-950',
     icon: '🚌',
-    badge: 'Lagos Urban Suspense',
+    badge: '27 Chapters • Lagos Urban Suspense',
     targetAudience: 'JAMB UTME Candidates & Urban Youth',
     moralLesson: 'Calm composure in adversity, mutual empathy, and honesty turn life’s chaotic traffic jams into triumph.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Deluge at Ikorodu',
         content: `The sky over Lagos looked like bruised indigo velvet. At 6:45 PM on a Tuesday evening, torrential rain turned the Ikorodu Expressway into an unbroken sea of flashing brake lights, honking horns, and cascading brown water.
@@ -560,7 +598,19 @@ Damilola straightened his collar, dried his shoes on the entrance mat, and march
 
 "By the grace of God, sir, and the indestructible spirit of the Lagos Danfo."`
       }
-    ],
+    ], 27, {
+      storyId: 'last-danfo-oshodi',
+      title: 'The Last Danfo to Oshodi',
+      protagonist: 'Damilola',
+      companion: 'Dr. Aminat',
+      mentor: 'Pa Johnson',
+      antagonist: 'Gridlock & Flood Emergency',
+      setting: 'Lagos Expressway',
+      landmark: 'Third Mainland Bridge & Maryland Railway',
+      genre: 'Thriller',
+      centralArtifactOrHook: 'the original JAMB certificate folder and the railway bypass',
+      moralLesson: 'Calm composure in adversity, mutual empathy, and honesty turn life’s chaotic traffic jams into triumph.'
+    }),
     vocabulary: [
       {
         word: 'Deluge',
@@ -644,17 +694,17 @@ Damilola straightened his collar, dried his shoes on the entrance mat, and march
     author: 'Hajia Maryam Sanusi',
     authorBio: 'Astrophysics lecturer at Bayero University Kano & girls’ education pioneer.',
     genre: 'Historical STEM',
-    readingTimeMinutes: 7,
-    wordCount: 1300,
+    readingTimeMinutes: 75,
+    wordCount: 16000,
     difficulty: 'Intermediate',
     tagline: 'Shadows, sundials, and a teenage girl who outsmarted the 1968 colonial observatory.',
-    synopsis: 'In Kano City during the solar eclipse of September 1968, fifteen-year-old Amina uses a handmade pinhole water mirror and trigonometry to calculate the solar corona diameter. When her findings contradict the visiting European survey team, she must defend her calculations before the Emir’s palace council.',
+    synopsis: 'In Kano City during the solar eclipse of September 1968, fifteen-year-old Amina uses a handmade pinhole water mirror and trigonometry to calculate the solar corona diameter. Across 50 expansive chapters, she journeys through deep mathematical inquiry, palace debates, and celestial discoveries that prove West Africa’s enduring scientific legacy.',
     coverGradient: 'from-amber-950 via-rose-950 to-slate-950',
     icon: '☀️',
-    badge: 'Historical STEM Heroine',
+    badge: '50 Chapters • Epic Historical STEM Saga',
     targetAudience: 'WAEC Mathematics & Physics Scholars',
     moralLesson: 'Scientific truth respects no borders, titles, or gender; empirical evidence speaks louder than authority.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Geometry of Shadows',
         content: `Long before calculators were imported into northern classrooms, fifteen-year-old Amina sat in the courtyard of her family’s mud-walled compound in the ancient city of Kano.
@@ -715,7 +765,19 @@ The Emir smiled warmly from beneath his golden umbrella. "In Kano, knowledge has
 
 Before the colonial expedition departed the following week, Dr. Kensington presented Amina with his personal brass micrometer and a leather-bound copy of Isaac Newton’s *Principia Mathematica*. Amina would go on to become one of the first female professors of astrophysics in West Africa, inspiring thousands of girls to reach for the stars.`
       }
-    ],
+    ], 50, {
+      storyId: 'girl-who-weighed-the-sun',
+      title: 'The Girl Who Weighed the Sun',
+      protagonist: 'Amina',
+      companion: 'Zainab',
+      mentor: 'Mallam Sanusi',
+      antagonist: 'Dr. Arthur Kensington',
+      setting: 'Ancient City of Kano',
+      landmark: 'Gidan Rumfa palace & the ancient minaret',
+      genre: 'Historical STEM',
+      centralArtifactOrHook: 'the pinhole indigo water mirror and trigonometric solar calculations',
+      moralLesson: 'Scientific truth respects no borders, titles, or gender; empirical evidence speaks louder than authority.'
+    }),
     vocabulary: [
       {
         word: 'Umbra',
@@ -799,17 +861,17 @@ Before the colonial expedition departed the following week, Dr. Kensington prese
     author: 'Kayode Fashola',
     authorBio: 'Playwright, educator, and author of humorous boarding school chronicles.',
     genre: 'Campus Comedy',
-    readingTimeMinutes: 6,
-    wordCount: 1250,
+    readingTimeMinutes: 26,
+    wordCount: 6400,
     difficulty: 'Accessible',
     tagline: 'A bubbling green mascot, banana-scented smoke, and the most chaotic quiz night in school history.',
-    synopsis: 'At the annual Inter-House Science & Athletics gala of Federal Government College Odogbolu, Blue House and Red House are deadlocked. When a harmless chemistry prank with dry ice and food coloring goes wonderfully haywire right as the Senior Prefect takes the microphone, the two rival captains must work together to neutralize an effervescent foam volcano before the Principal cancels inter-house sports forever.',
+    synopsis: 'At the annual Inter-House Science & Athletics gala of Federal Government College Odogbolu, Blue House and Red House are deadlocked. When a harmless chemistry prank with dry ice and food coloring goes wonderfully haywire right as the Senior Prefect takes the microphone, the two rival captains must navigate 20 hilarious and educational chapters to neutralize an effervescent foam volcano before the Principal cancels inter-house sports forever.',
     coverGradient: 'from-teal-950 via-emerald-950 to-blue-950',
     icon: '🧪',
-    badge: 'School Satire & Fun',
+    badge: '20 Chapters • School Satire & Fun',
     targetAudience: 'Secondary School & CBT Science Students',
     moralLesson: 'Rivalry is healthy when tempered with sportsmanship; when chaos erupts, cooperation accomplishes more than blame.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Rivalry of the Houses',
         content: `In the sixty-year history of Federal Government College Odogbolu, no rivalry burned hotter than the competition between Blue House (named after the legendary King Jaja of Opobo) and Red House (named after Queen Amina of Zaria).
@@ -881,7 +943,19 @@ A thunderous cheer shook the assembly hall rafters. As Chidi and Emeka shook han
 
 Emeka grinned. "Agreed, Chidi. Next year, we try physics!"`
       }
-    ],
+    ], 20, {
+      storyId: 'great-chemistry-heist',
+      title: 'The Great Inter-House Chemistry Heist',
+      protagonist: 'Chidi',
+      companion: 'Emeka',
+      mentor: 'Mr. Okonjo',
+      antagonist: 'Principal Adeyemi',
+      setting: 'FGC Odogbolu',
+      landmark: 'the central assembly field and science laboratory',
+      genre: 'Campus Comedy',
+      centralArtifactOrHook: 'the runaway potassium iodide and soap foam eruption',
+      moralLesson: 'Rivalry is healthy when tempered with sportsmanship; when chaos erupts, cooperation accomplishes more than blame.'
+    }),
     vocabulary: [
       {
         word: 'Exothermic',
@@ -965,17 +1039,17 @@ Emeka grinned. "Agreed, Chidi. Next year, we try physics!"`
     author: 'Ustaz Balarabe Dan-Ige',
     authorBio: 'Traditional Hausa folklorist & historian of ancient northern trade routes.',
     genre: 'Folklore',
-    readingTimeMinutes: 8,
-    wordCount: 1450,
+    readingTimeMinutes: 38,
+    wordCount: 8640,
     difficulty: 'Accessible',
     tagline: 'Three enchanted silver threads, an unjust tax, and the weaver who chose honesty over gold.',
-    synopsis: 'Near the Kurmi market in sixteenth-century Kano, young weaver Balarabe rescues a sacred owl from a dust storm and is blessed by the spirit of the ancient Baobab tree with three enchanted threads that can weave cloth showing a person’s true intentions. When a dishonest royal tax collector tries to seize the village harvests, Balarabe must decide whether to save his own skin or weave the truth.',
+    synopsis: 'Near the Kurmi market in sixteenth-century Kano, young weaver Balarabe rescues a sacred owl from a dust storm and is blessed by the spirit of the ancient Baobab tree with three enchanted threads that can weave cloth showing a person’s true intentions. Across 27 captivating folkloric chapters, Balarabe stands up against royal extortion, uniting the artisans of ancient Kano through truth and courage.',
     coverGradient: 'from-amber-950 via-red-950 to-slate-950',
     icon: '🌳',
-    badge: 'Moral Legend',
+    badge: '27 Chapters • Moral Legend',
     targetAudience: 'Secondary & Literature Scholars',
     moralLesson: 'Truth woven with integrity will outlast any garment of deceit; courage in defense of the vulnerable is the highest nobility.',
-    chapters: [
+    chapters: expandCoreStory([
       {
         title: 'Chapter 1: The Weaver by the Kurmi Gate',
         content: `Five hundred years ago, when the city of Kano was encircled by colossal brown mud ramparts with fourteen iron gates, the Kurmi market hummed with merchants from Timbuktu, Cairo, and Tripoli. Camels laden with salt, indigo dyed robes, and leather saddles filled the dusty lanes.
@@ -1041,7 +1115,19 @@ Balarabe bowed with humble grace. "Your Majesty, I ask for only one thing: that 
 
 The decree was carved that very day. And for generations to come, whenever a student in Kano picks up a pen or a weaver lifts a shuttle, they remember that truth is a fabric that never tears.`
       }
-    ],
+    ], 27, {
+      storyId: 'calabash-of-stars',
+      title: 'The Whispering Baobab of Kano',
+      protagonist: 'Balarabe',
+      companion: 'Aliyu',
+      mentor: 'Spirit of the Baobab',
+      antagonist: 'Alhaji Galadima',
+      setting: '16th Century Kano',
+      landmark: 'Kurmi Market & Dala Hill',
+      genre: 'Folklore',
+      centralArtifactOrHook: 'the three enchanted celestial silver threads',
+      moralLesson: 'Truth woven with integrity will outlast any garment of deceit; courage in defense of the vulnerable is the highest nobility.'
+    }),
     vocabulary: [
       {
         word: 'Ramparts',
@@ -1274,6 +1360,7 @@ const THEME_ICONS = ['⚡', '🔬', '🔍', '📖', '🏛️', '🌿', '💡', '
 function generateExpandedStoryBooks(): StoryBook[] {
   const targetCount = 493; // 7 core + 493 = 500 stories exactly
   const list: StoryBook[] = [];
+  const CHAPTER_TIERS: (10 | 20 | 24 | 27 | 50)[] = [10, 20, 24, 27, 50];
 
   for (let i = 0; i < targetCount; i++) {
     const premise = STORY_PREMISES[i % STORY_PREMISES.length];
@@ -1285,8 +1372,11 @@ function generateExpandedStoryBooks(): StoryBook[] {
 
     const storyNumber = i + 8;
     const title = `${premise.theme} of ${location.city} (Vol. ${Math.floor(i / 12) + 1})`;
-    const readingTime = 5 + (i % 6); // 5 to 10 mins
-    const wordCount = 900 + (i % 8) * 90;
+    
+    // Choose chapter tier: 10, 20, 24, 27, or 50 chapters
+    const chapterCount = CHAPTER_TIERS[i % CHAPTER_TIERS.length];
+    const readingTime = Math.round(chapterCount * 1.8);
+    const wordCount = chapterCount * 320;
 
     // Pick 3 vocabulary words
     const v1 = VOCABULARY_POOL[(i * 2) % VOCABULARY_POOL.length];
@@ -1295,21 +1385,25 @@ function generateExpandedStoryBooks(): StoryBook[] {
 
     const difficulty: StoryBook['difficulty'] = i % 3 === 0 ? 'Accessible' : i % 3 === 1 ? 'Intermediate' : 'Advanced Lexis';
 
-    const chapters: StoryChapter[] = [
-      {
-        title: `Chapter 1: The Challenge at ${location.city}`,
-        content: `The morning air around ${location.landmark} was crisp with anticipation. Seventeen-year-old student Chuka adjusted his satchel as fellow scholars gathered beneath the shade of the ancient neem trees. In ${location.city}, academic excellence was not merely a classroom pursuit; it was the sacred standard by which secondary school contenders proved their mettle before the national examinations.\n\nChuka had spent months studying past questions and examining scientific principles under the kerosene lantern in his family's compound. The national syllabus required deep comprehension of complex concepts, yet his mind was set on something bolder. ${premise.hook} Standing before the school assembly hall, he recognized that every great achievement demands courageous resolve and disciplined perseverance.`
-      },
-      {
-        title: `Chapter 2: The Breakthrough`,
-        content: `When the critical moment of testing arrived, unexpected complications threatened to derail months of meticulous preparation. The test indicators fluctuated wildly, and skeptical onlookers whispered that such an ambitious feat had never been accomplished by a student from ${location.state} State.\n\nRemaining calm under pressure, Chuka recalled the timeless guidance of his literature and science teachers. By applying a ${v1.word} approach and maintaining ${v2.word} focus, he calibrated the solution step by step. Within thirty minutes, the mechanism stabilized, eliciting gasps of admiration from the observing examiners and fellow scholars alike. The lesson of ${location.city} was forever stamped upon his memory: ${premise.moral}`
-      }
-    ];
+    const chapters = buildEngagingChapters({
+      storyId: `story-library-${storyNumber}`,
+      title,
+      protagonist: i % 2 === 0 ? 'Chuka' : 'Amina',
+      companion: i % 2 === 0 ? 'Emeka' : 'Zainab',
+      mentor: 'Professor Adebayo',
+      antagonist: 'Inspector Adeleke',
+      setting: location.city,
+      landmark: location.landmark,
+      genre,
+      centralArtifactOrHook: premise.hook,
+      moralLesson: premise.moral,
+      chapterCount
+    });
 
     const quiz: ComprehensionQuestion[] = [
       {
         id: `q-exp-${storyNumber}-1`,
-        question: `What was the primary academic setting of Chuka’s challenge in ${location.city}?`,
+        question: `What was the primary academic setting of the challenge in ${location.city}?`,
         options: {
           A: `Near ${location.landmark} during preparation for national examinations`,
           B: `Inside an abandoned cinema hall in London`,
@@ -1323,13 +1417,13 @@ function generateExpandedStoryBooks(): StoryBook[] {
         id: `q-exp-${storyNumber}-2`,
         question: `Which core virtue enabled the protagonist to overcome unexpected complications?`,
         options: {
-          A: `Quitting early and blaming his teachers`,
-          B: `A ${v1.word} and ${v2.word} approach coupled with disciplined perseverance`,
+          A: `Quitting early and blaming their teachers`,
+          B: `A ${v1.word} and ${v2.word} approach coupled with disciplined perseverance across all ${chapterCount} chapters`,
           C: `Using dishonest shortcuts to falsify the results`,
           D: `Relying purely on superstition without scientific reasoning`
         },
         correctOption: 'B',
-        explanation: `The narrative highlights that disciplined perseverance and a meticulous approach allowed Chuka to stabilize the solution.`
+        explanation: `The narrative highlights that disciplined perseverance and a meticulous approach allowed the protagonist to stabilize the solution.`
       },
       {
         id: `q-exp-${storyNumber}-3`,
@@ -1355,10 +1449,10 @@ function generateExpandedStoryBooks(): StoryBook[] {
       wordCount,
       difficulty,
       tagline: premise.hook,
-      synopsis: `Set in ${location.city}, ${location.state} State. ${premise.hook} A captivating Nigerian narrative that reinforces ${premise.moral.toLowerCase()}`,
+      synopsis: `Set in ${location.city}, ${location.state} State. ${premise.hook} A captivating Nigerian narrative in ${chapterCount} rich chapters that reinforces ${premise.moral.toLowerCase()}`,
       coverGradient,
       icon,
-      badge: genre === 'Sci-Fi' ? 'STEM Innovation' : genre === 'Mystery' ? 'Detective Riddle' : genre === 'Folklore' ? 'Cultural Heritage' : genre === 'Campus Comedy' ? 'Campus Life' : 'WAEC Lexis Pick',
+      badge: `${chapterCount} Chapters`,
       targetAudience: 'SS1 - SS3 Students & Tertiary Aspirants',
       moralLesson: premise.moral,
       chapters,

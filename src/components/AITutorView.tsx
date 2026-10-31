@@ -33,9 +33,6 @@ import {
   Terminal,
   Cpu,
   Globe,
-  FolderDown,
-  Folder,
-  Download,
   HelpCircle
 } from 'lucide-react';
 import { User, AITutorMessage, Subject } from '../types';
@@ -342,7 +339,6 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
-  const [isRefreshingQuota, setIsRefreshingQuota] = useState(false);
   const [speechRate, setSpeechRateState] = useState<number>(() => aiVoice.getSpeechRate());
   const [persona, setPersonaState] = useState<VoicePersona>(() => getVoicePersona());
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -394,12 +390,14 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     usedToday: number;
     remainingToday: number;
     isUnlimited: boolean;
+    isLockedOut?: boolean;
   }>({
     plan: user?.premiumPlan || 'free',
-    dailyLimit: isMember ? (user?.premiumPlan === 'premium' ? 999999 : 50) : 10,
+    dailyLimit: isMember ? (user?.premiumPlan === 'premium' ? 999999 : 120) : 80,
     usedToday: 0,
-    remainingToday: isMember ? (user?.premiumPlan === 'premium' ? 999999 : 50) : 10,
-    isUnlimited: user?.premiumPlan === 'premium' || !!user?.isGoat
+    remainingToday: isMember ? (user?.premiumPlan === 'premium' ? 999999 : 120) : 80,
+    isUnlimited: user?.premiumPlan === 'premium' || !!user?.isGoat,
+    isLockedOut: false
   });
 
   const [limitReachedModal, setLimitReachedModal] = useState(false);
@@ -449,12 +447,15 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     api.getAITutorStatus()
       .then(res => {
         if (res) {
+          const isUnlimited = res.plan === 'premium' || !!user?.isGoat;
+          const isLockedOut = res.isLockedOut || (!isUnlimited && ((res.remainingToday !== undefined && res.remainingToday <= 0) || (res.usedToday >= res.dailyLimit)));
           setQuota({
             plan: res.plan,
-            dailyLimit: res.dailyLimit,
-            usedToday: res.usedToday,
-            remainingToday: res.remainingToday,
-            isUnlimited: res.isUnlimited
+            dailyLimit: res.dailyLimit || (isMember ? 120 : 80),
+            usedToday: res.usedToday || 0,
+            remainingToday: res.remainingToday !== undefined ? res.remainingToday : (isMember ? 120 : 80),
+            isUnlimited,
+            isLockedOut
           });
         }
       })
@@ -472,26 +473,6 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     }
   }, [initialTopic]);
 
-  const handleResetQuota = async () => {
-    setIsRefreshingQuota(true);
-    try {
-      const res = await api.resetAITutorTrial();
-      if (res && res.success) {
-        setQuota({
-          plan: res.plan,
-          dailyLimit: res.dailyLimit,
-          usedToday: 0,
-          remainingToday: res.dailyLimit,
-          isUnlimited: res.plan === 'premium'
-        });
-        setLimitReachedModal(false);
-      }
-    } catch (err) {
-      console.error('Failed to reset quota:', err);
-    } finally {
-      setIsRefreshingQuota(false);
-    }
-  };
 
   const handleClearChat = () => {
     aiVoice.stop();
@@ -549,24 +530,6 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     });
   };
 
-  const handleExportChatNotes = () => {
-    if (messages.length === 0) return;
-    const header = `# StudyNaija AI Study Session Notes\nDate: ${new Date().toLocaleDateString()} | Time: ${new Date().toLocaleTimeString()}\nStudent: ${user?.name || 'Scholar'}\n\n=======================================================\n\n`;
-    const formatted = messages.map(m => {
-      const sender = m.sender === 'user' ? `[YOU] (${m.timestamp})` : `[NAIJA AI TUTOR] (${m.timestamp})`;
-      return `${sender}\n${m.text}\n\n-------------------------------------------------------\n`;
-    }).join('\n');
-
-    const blob = new Blob([header + formatted], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `StudyNaija_AI_Notes_${new Date().toISOString().split('T')[0]}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const handleSendMessage = async (customPrompt?: string) => {
     const text = customPrompt || inputMessage;
@@ -590,8 +553,8 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
       return;
     }
 
-    // Check if free user is already out of quota
-    if (!quota.isUnlimited && quota.remainingToday <= 0) {
+    // Check if free/non-member user is already locked out or out of quota (80 questions/day)
+    if (!quota.isUnlimited && (quota.remainingToday <= 0 || quota.usedToday >= quota.dailyLimit || quota.isLockedOut)) {
       setLimitReachedModal(true);
       return;
     }
@@ -622,12 +585,15 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
       });
 
       // Update quota status
+      const isUnlimited = res.isUnlimited || res.plan === 'premium';
+      const isLockedOut = !isUnlimited && (res.remainingToday <= 0 || res.usedToday >= res.dailyLimit);
       setQuota({
         plan: res.plan,
         dailyLimit: res.dailyLimit,
         usedToday: res.usedToday,
         remainingToday: res.remainingToday,
-        isUnlimited: res.isUnlimited
+        isUnlimited,
+        isLockedOut
       });
 
       // Award XP for engaging with AI Tutor
@@ -648,9 +614,14 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     } catch (err: any) {
       if (err?.status === 403 && (err?.message?.includes('UNRESTRICTED') || err?.message?.includes('Unrestricted'))) {
         setMembershipPromptOpen(true);
-      } else if (err?.status === 403 || err?.data?.error === 'MEMBERSHIP_LIMIT_REACHED') {
+      } else if (
+        err?.status === 403 ||
+        err?.data?.error === 'MEMBERSHIP_LIMIT_REACHED' ||
+        err?.data?.error === 'NON_MEMBERSHIP_LIMIT_LOCKED' ||
+        err?.message?.includes('locked out')
+      ) {
         setLimitReachedModal(true);
-        setQuota(prev => ({ ...prev, remainingToday: 0 }));
+        setQuota(prev => ({ ...prev, remainingToday: 0, isLockedOut: true }));
       } else {
         const errorMsg: AITutorMessage = {
           id: `tutor-err-${Date.now()}`,
@@ -723,6 +694,7 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
     { label: '🕵️ MITM Packet Sniffing & TLS 1.3', text: 'How do Man-in-the-Middle (MITM) and ARP poisoning attacks work, and how does HTTPS with HSTS prevent packet sniffing on public Wi-Fi?' },
     { label: '🛡️ Ethical Hacking Career Roadmap', text: 'What is the complete roadmap and methodology for becoming an ethical hacker / penetration tester, and what are the legal boundaries under the Nigerian Cybercrimes Act 2015?' }
   ] : [
+    { label: '💡 Explain in Plain English (ELI5)', text: 'Explain Quadratic Equations and Calculus in simple, plain, easy-to-understand English with real-world analogies.' },
     { label: '📐 Quadratic & Almighty Formula', text: 'How do I solve quadratic equations using the Almighty Formula? Show complete step-by-step workings with an example.' },
     { label: '📖 English Concord & Grammatical Rules', text: 'Explain the essential rules of grammatical concord in English (Subject-Verb agreement, Proximity, Indefinite Pronouns) with JAMB past question examples.' },
     { label: '⚡ Newton\'s Laws of Motion', text: 'Explain Newton\'s Three Laws of Motion with real-world examples, mathematical formulas, and calculations.' },
@@ -869,32 +841,23 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
                 <Crown className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
                 <span>Unlimited</span>
               </div>
+            ) : quota.isLockedOut || quota.remainingToday <= 0 ? (
+              <button
+                type="button"
+                onClick={() => setLimitReachedModal(true)}
+                className="flex items-center gap-1.5 bg-rose-950/80 px-2.5 py-1 rounded-xl border border-rose-500/60 text-xs font-bold text-rose-200 hover:bg-rose-900 transition cursor-pointer"
+                title="80 questions daily non-membership limit reached. Locked for today."
+              >
+                <Lock className="w-3.5 h-3.5 text-rose-400" />
+                <span>80/80 Locked Today</span>
+              </button>
             ) : (
               <div className="flex items-center gap-1.5 bg-emerald-950/50 px-2.5 py-1 rounded-xl border border-emerald-600/40 text-xs font-bold">
-                <span className="text-emerald-200 text-[11px] hidden sm:inline">Daily:</span>
-                <span className={quota.remainingToday > 0 ? 'text-white' : 'text-rose-300 font-extrabold'}>
-                  {quota.remainingToday}/{quota.dailyLimit}
+                <span className="text-emerald-200 text-[11px] hidden sm:inline">{!isMember ? 'Non-Member Limit:' : 'Daily:'}</span>
+                <span className={quota.remainingToday > 10 ? 'text-white' : 'text-amber-300 font-extrabold'}>
+                  {quota.remainingToday}/{quota.dailyLimit} Qs
                 </span>
-                <button
-                  onClick={handleResetQuota}
-                  disabled={isRefreshingQuota}
-                  title="Reset daily trial quota"
-                  className="text-emerald-300 hover:text-white transition-colors cursor-pointer ml-0.5"
-                >
-                  <RotateCcw className={`w-3 h-3 ${isRefreshingQuota ? 'animate-spin' : ''}`} />
-                </button>
               </div>
-            )}
-
-            {/* Export Chat Notes */}
-            {messages.length > 1 && (
-              <button
-                onClick={handleExportChatNotes}
-                title="Export & Download Chat Notes (Markdown)"
-                className="p-1.5 text-emerald-200 hover:text-white hover:bg-emerald-700/60 rounded-xl transition-all cursor-pointer flex items-center gap-1"
-              >
-                <Download className="w-4 h-4" />
-              </button>
             )}
 
             {/* Clear Chat Button */}
@@ -1144,6 +1107,19 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
                   </span>
                   <button
                     type="button"
+                    onClick={() => {
+                      const avg = user?.stats?.averageScore ?? 68;
+                      const qCount = user?.stats?.questionsAnswered ?? 42;
+                      const weak = user?.stats?.weakestSubject || 'Physics';
+                      handleSendMessage(`Analyze my performance on Study Naija: I have answered ${qCount} questions, averaging ${avg}% overall, with my weakest subject as ${weak}. Based on the JAMB UTME syllabus, provide: 1. Diagnostic assessment; 2. Top 3 priority topics to study right now; 3. 5-day score booster schedule.`);
+                    }}
+                    className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-md transition-colors text-[10px] cursor-pointer shadow-2xs flex items-center gap-1"
+                    title="Diagnose student scores and recommend priority study topics"
+                  >
+                    <span>🎯 Recommend Topics</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => insertTemplate('Solve with full step-by-step mathematical working and formulas: ')}
                     className="px-2 py-0.5 bg-white hover:bg-cyan-100 text-cyan-900 font-bold rounded-md border border-cyan-300 transition-colors text-[10px] cursor-pointer shadow-2xs"
                   >
@@ -1313,6 +1289,27 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
             </div>
           </div>
 
+          {/* Lockout Banner if 80 questions limit reached */}
+          {!quota.isUnlimited && (quota.remainingToday <= 0 || quota.usedToday >= quota.dailyLimit || quota.isLockedOut) && (
+            <div className="mb-2 p-3 bg-gradient-to-r from-rose-950/90 to-amber-950/90 border border-rose-500/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs shadow-lg animate-in fade-in">
+              <div className="flex items-center gap-2 text-rose-200">
+                <Lock className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>
+                  <strong>🔒 Daily Lockout Active:</strong> Non-membership users have a daily allowance of 80 questions. You have used your 80 questions for today and are locked out until tomorrow.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('premium')}
+                  className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md text-center"
+                >
+                  Upgrade for Unlimited Access →
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* WhatsApp Text Input Capsule */}
           <form
             onSubmit={(e) => {
@@ -1343,14 +1340,14 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
                 onChange={e => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  !quota.isUnlimited && quota.remainingToday <= 0
-                    ? "Daily questions finished. Upgrade to continue asking Naija AI..."
+                  !quota.isUnlimited && (quota.remainingToday <= 0 || quota.usedToday >= quota.dailyLimit || quota.isLockedOut)
+                    ? "🔒 Daily 80-question limit reached for non-membership. Locked out for today. Upgrade to Membership to continue asking!"
                     : "Message Naija AI... (e.g. 'Solve 3x² - 5x + 2 = 0', or paste a past question)"
                 }
-                disabled={isLoading || (!quota.isUnlimited && quota.remainingToday <= 0)}
+                disabled={isLoading || (!quota.isUnlimited && (quota.remainingToday <= 0 || quota.usedToday >= quota.dailyLimit || quota.isLockedOut))}
                 className={`w-full ${
                   isInputExpanded ? 'min-h-[140px]' : 'min-h-[46px] max-h-[160px]'
-                } p-1.5 text-xs sm:text-sm bg-transparent text-slate-900 outline-none resize-y leading-relaxed placeholder:text-slate-400`}
+                } p-1.5 text-xs sm:text-sm bg-transparent text-slate-900 outline-none resize-y leading-relaxed placeholder:text-slate-400 disabled:opacity-60`}
               />
 
               {/* Clear draft */}
@@ -1370,7 +1367,7 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
             <button
               id="send-ai-tutor-btn"
               type="submit"
-              disabled={!inputMessage.trim() || isLoading || (!quota.isUnlimited && quota.remainingToday <= 0)}
+              disabled={!inputMessage.trim() || isLoading || (!quota.isUnlimited && (quota.remainingToday <= 0 || quota.usedToday >= quota.dailyLimit || quota.isLockedOut))}
               className="w-12 h-12 rounded-full bg-[#00a884] hover:bg-[#008f6f] active:scale-95 text-white flex items-center justify-center shadow-md transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer shrink-0"
               title="Send to Naija AI (Enter)"
             >
@@ -1394,33 +1391,38 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
             </div>
 
             <div className="space-y-2">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700 px-3 py-1 bg-amber-50 rounded-full border border-amber-200">
-                Daily Limit Reached
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-700 px-3 py-1 bg-rose-50 rounded-full border border-rose-200">
+                🔒 Non-Membership Daily Limit Reached (80 / 80)
               </span>
               <h3 className="text-xl font-black text-slate-900 font-['Outfit']">
-                Upgrade to Keep Asking Naija AI 🚀
+                Locked Out of Naija AI for Today
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                You’ve used your questions for today. 
-                Our membership plans unlock <strong>Unlimited 24/7 AI tutoring</strong>, full step-by-step workings, and memory continuity!
+                Non-membership users have a daily allowance of <strong>80 questions on Naija AI</strong>. 
+                You have reached your 80 questions and are now locked out of Naija AI for the rest of the day. 
+                Upgrade to a Membership plan to unlock <strong>Unlimited 24/7 AI tutoring</strong> immediately, or return tomorrow!
               </p>
             </div>
 
             {/* Plan Comparison Pills */}
             <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-left space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="font-semibold">Non-Membership (Free)</span>
+                <span className="text-rose-600 font-extrabold">80 Qs/day (Locked after 80)</span>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-700">Basic Tier (₦1,500/mo)</span>
-                <span className="text-emerald-700 font-extrabold">30 questions/day</span>
+                <span className="text-emerald-700 font-extrabold">120 questions/day</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-700">Medium Tier (₦3,000/mo)</span>
-                <span className="text-emerald-700 font-extrabold">75 questions/day</span>
+                <span className="text-emerald-700 font-extrabold">250 questions/day</span>
               </div>
-              <div className="flex items-center justify-between bg-purple-50 p-1.5 rounded-lg border border-purple-200">
+              <div className="flex items-center justify-between bg-purple-50 p-2 rounded-xl border border-purple-200">
                 <span className="font-extrabold text-purple-900 flex items-center gap-1">
                   <Crown className="w-3.5 h-3.5 text-purple-600" /> Premium VIP
                 </span>
-                <span className="text-purple-700 font-black">Unlimited + Unrestricted Mode</span>
+                <span className="text-purple-700 font-black">Unlimited 24/7 + Unrestricted Mode</span>
               </div>
             </div>
 
@@ -1437,17 +1439,8 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
               </button>
 
               <button
-                onClick={handleResetQuota}
-                disabled={isRefreshingQuota}
-                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 ${isRefreshingQuota ? 'animate-spin' : ''}`} />
-                <span>Reset Daily Session Allowance</span>
-              </button>
-
-              <button
                 onClick={() => setLimitReachedModal(false)}
-                className="w-full py-1 text-xs text-slate-500 hover:text-slate-700 font-bold cursor-pointer"
+                className="w-full py-2 text-xs text-slate-500 hover:text-slate-700 font-bold cursor-pointer"
               >
                 Close
               </button>

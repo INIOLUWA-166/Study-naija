@@ -27,28 +27,105 @@ import { StoryBooksView } from './components/StoryBooksView';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { BadgeUnlockedToast } from './components/BadgeUnlockedToast';
 import { AdminAiRevocationModal } from './components/AdminAiRevocationModal';
+import { AdminSuspensionModal } from './components/AdminSuspensionModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { ChampionsQualificationModal } from './components/ChampionsQualificationModal';
 import { ScientificCalculator } from './components/ScientificCalculator';
 import { StudentNotificationModal } from './components/StudentNotificationModal';
 import { NotificationToast } from './components/NotificationToast';
+import { ScholarHonorCodeModal } from './components/ScholarHonorCodeModal';
 import { studentNotificationManager } from './utils/studentNotificationManager';
-import { User, Subject, Article } from './types';
+import { PastQuestionHarvesterView } from './components/PastQuestionHarvesterView';
+import { NewsFactCheckerAgentView } from './components/NewsFactCheckerAgentView';
+import { AIStudyAssistantChatbot } from './components/AIStudyAssistantChatbot';
+import { StudentLeaderboard } from './components/StudentLeaderboard';
+import { User, Subject, Article, Question } from './types';
 import { api, authStorage } from './services/api';
+import { 
+  auth, 
+  db, 
+  onAuthStateChanged, 
+  logOutFromFirebase, 
+  syncUserProfileToFirestore 
+} from './services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { EXTENDED_QUESTIONS } from './utils/questionBank';
 import { INITIAL_QUESTIONS } from './mockData';
 import { aiVoice, getStudentFirstName, setStoredFirstName } from './utils/aiVoice';
-import { BookOpen, ShieldCheck, Heart, Sparkles, Trophy, Crown, Award, Zap, Smartphone } from 'lucide-react';
+import { 
+  BookOpen, 
+  ShieldCheck, 
+  Heart, 
+  Sparkles, 
+  Trophy, 
+  Crown, 
+  Award, 
+  Zap, 
+  Smartphone, 
+  Scale,
+  ArrowLeft,
+  Target,
+  Eye
+} from 'lucide-react';
 import { tournamentManager, isUserQualifiedForChampions } from './utils/tournamentManager';
 import { tournamentAudio } from './utils/tournamentAudio';
 import { triggerChampionsLeagueVictoryConfetti } from './utils/confettiCelebration';
 import { themeManager, ThemeMode } from './utils/themeManager';
 
+const getViewTitle = (view: string): string => {
+  switch (view) {
+    case 'tournament':
+      return 'Academic Champions League Cup';
+    case 'subjects':
+      return 'JAMB & WAEC Subjects Catalog';
+    case 'practice':
+      return 'Daily CBT Practice';
+    case 'mock-exam':
+      return 'Timed CBT Mock Exam Hall';
+    case 'question-grabber':
+    case 'harvester':
+    case 'grab-questions':
+    case 'past-questions':
+    case 'past-jamb':
+    case 'jamb-archive':
+      return 'Past JAMB Questions Archive';
+    case 'search-pad':
+      return 'Syllabus & Topic Search Pad';
+    case 'ai-tutor':
+      return 'Naija AI Academic Tutor';
+    case 'news-agent':
+    case 'news':
+    case 'fact-check':
+      return 'Real-Time News & Fact-Checker';
+    case 'dashboard':
+      return 'Student Academic Dashboard';
+    case 'leaderboard':
+      return 'Nationwide Top Scorers Leaderboard';
+    case 'arena-1v1':
+      return '1v1 Head-to-Head Arena';
+    case 'community':
+      return 'Nigerian Scholar Community';
+    case 'stories':
+    case 'storybook':
+    case 'storybooks':
+      return 'Literature Storybooks Hub';
+    case 'premium':
+      return 'StudyNaija VIP Plans & Pricing';
+    case 'study-tips':
+      return 'Examiner Study Tips & Strategies';
+    case 'admin':
+      return 'Admin Sentinel Security Portal';
+    default:
+      return 'Academic Study Hub';
+  }
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('home');
+  const [focusModeActive, setFocusModeActive] = useState<boolean>(true);
   // Optimistically initialize user from persistent local storage so it NEVER flashes login screen
   const [user, setUser] = useState<User | null>(() => authStorage.getUser());
-  const [authLoading, setAuthLoading] = useState<boolean>(() => !authStorage.getUser());
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => themeManager.getThemeMode(user));
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
@@ -65,6 +142,20 @@ export default function App() {
   const [isGlobalCalculatorOpen, setIsGlobalCalculatorOpen] = useState<boolean>(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(() => studentNotificationManager.getUnreadCount(user?.id));
+  const [isAdminSuspendedOpen, setIsAdminSuspendedOpen] = useState<boolean>(false);
+  const [isHonorCodeOpen, setIsHonorCodeOpen] = useState<boolean>(false);
+  const [customPracticeQuestions, setCustomPracticeQuestions] = useState<Question[] | null>(null);
+
+  // Admin AI 2-minute suspension protocol (once)
+  useEffect(() => {
+    if (currentView === 'admin') {
+      const suspendedDone = localStorage.getItem('studynaija_admin_suspended_once');
+      if (!suspendedDone) {
+        setIsAdminSuspendedOpen(true);
+        localStorage.setItem('studynaija_admin_suspended_once', 'true');
+      }
+    }
+  }, [currentView]);
 
   // Keep unread notification count synchronized in real time
   useEffect(() => {
@@ -80,6 +171,55 @@ export default function App() {
       window.removeEventListener('studynaija_notification_updated', handleNotifUpdate);
     };
   }, [user]);
+
+  // Listen to Firebase Auth state to sync Google signed-in users and restore Firestore profile
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const userDocRef = doc(db, 'users', fbUser.uid);
+          const snap = await getDoc(userDocRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            const syncedUser: User = {
+              id: fbUser.uid,
+              name: data.name || fbUser.displayName || 'Scholar',
+              email: fbUser.email || data.email || '',
+              role: data.role || (fbUser.email === 'luvkidjaja@gmail.com' ? 'admin' : 'student'),
+              educationLevel: data.educationLevel || 'secondary',
+              targetExam: data.targetExam || 'JAMB',
+              targetCourse: data.targetCourse || 'General Studies',
+              premiumPlan: data.premiumPlan || 'free',
+              createdAt: data.createdAt || new Date().toISOString(),
+              xp: data.xp || 50,
+              streakDays: data.streakDays || 1,
+              lastActiveDate: new Date().toISOString(),
+              stats: data.stats || {
+                questionsAnswered: 0,
+                averageScore: 0,
+                bestScore: 0,
+                weakestSubject: 'None'
+              }
+            };
+            setUser(syncedUser);
+            authStorage.setUser(syncedUser);
+          }
+        } catch (err) {
+          console.warn('Could not restore user from Firestore:', err);
+        }
+      }
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Sync user profile updates to Firestore
+  useEffect(() => {
+    if (user && auth.currentUser && auth.currentUser.uid === user.id) {
+      syncUserProfileToFirestore(user).catch(() => {});
+    }
+  }, [user?.xp, user?.streakDays, user?.targetExam, user?.targetCourse, user?.premiumPlan]);
 
   // Periodic check for 24-hour inactivity and study streaks
   useEffect(() => {
@@ -279,12 +419,23 @@ export default function App() {
       setIsGlobalCalculatorOpen(true);
       return;
     }
+    if (view === 'rules' || view === 'honor-code' || view === 'conduct') {
+      setIsHonorCodeOpen(true);
+      return;
+    }
     if (view === 'dashboard' && extra?.tab) {
       setDashboardInitialTab(extra.tab);
     }
     if (view === 'practice') {
       if (extra) {
         setPracticeParams({ subjectId: extra.subjectId, topic: extra.topic });
+        if (extra.customQuestions) {
+          setCustomPracticeQuestions(extra.customQuestions);
+        } else {
+          setCustomPracticeQuestions(null);
+        }
+      } else {
+        setCustomPracticeQuestions(null);
       }
     } else if (view === 'ai-tutor') {
       if (extra) {
@@ -316,6 +467,7 @@ export default function App() {
 
   const handleLogout = () => {
     api.logout();
+    logOutFromFirebase().catch(() => {});
     aiVoice.stop();
     setUser(null);
     setCurrentView('home');
@@ -323,6 +475,7 @@ export default function App() {
 
   const handleAuthSuccess = (authenticatedUser: User, targetView: string = 'home') => {
     setUser(authenticatedUser);
+    syncUserProfileToFirestore(authenticatedUser).catch(() => {});
     setCurrentView(targetView);
     const studentName = authenticatedUser.name || authenticatedUser.email;
     const firstName = getStudentFirstName(studentName);
@@ -368,22 +521,35 @@ export default function App() {
     );
   }
 
-  // 2. Strict Requirement: Students must create account / log in to see the website
-  if (!user) {
-    return (
-      <AuthGateway
-        onAuthSuccess={authenticatedUser => {
-          handleAuthSuccess(authenticatedUser, 'home');
-        }}
-      />
-    );
-  }
+  // Fallback for unauthenticated visitors / guests so learning materials are the first thing everyone sees
+  const guestScholarUser: User = {
+    id: 'guest-scholar',
+    name: 'Scholar Guest',
+    email: '',
+    role: 'student',
+    educationLevel: 'secondary',
+    targetExam: 'JAMB',
+    targetCourse: 'General Studies',
+    premiumPlan: 'free',
+    createdAt: new Date().toISOString(),
+    xp: 50,
+    streakDays: 1,
+    lastActiveDate: new Date().toISOString(),
+    stats: {
+      questionsAnswered: 0,
+      averageScore: 0,
+      bestScore: 0,
+      weakestSubject: 'None'
+    }
+  };
+
+  const effectiveUser = user || guestScholarUser;
 
   // Check tournament state to honor 1st, 2nd, and 3rd place champions
   const activeTournamentState = tournamentManager.getState(user);
-  const isChampion = !!(activeTournamentState.champion && (activeTournamentState.champion.id === user?.id || (user?.email && activeTournamentState.champion.email?.toLowerCase() === user.email.toLowerCase())));
-  const isRunnerUp = !!(activeTournamentState.runnerUp && (activeTournamentState.runnerUp.id === user?.id || (user?.email && activeTournamentState.runnerUp.email?.toLowerCase() === user.email.toLowerCase())));
-  const isThirdPlace = !!(activeTournamentState.thirdPlace && (activeTournamentState.thirdPlace.id === user?.id || (user?.email && activeTournamentState.thirdPlace.email?.toLowerCase() === user.email.toLowerCase())));
+  const isChampion = !!(user && activeTournamentState.champion && (activeTournamentState.champion.id === user?.id || (user?.email && activeTournamentState.champion.email?.toLowerCase() === user.email.toLowerCase())));
+  const isRunnerUp = !!(user && activeTournamentState.runnerUp && (activeTournamentState.runnerUp.id === user?.id || (user?.email && activeTournamentState.runnerUp.email?.toLowerCase() === user.email.toLowerCase())));
+  const isThirdPlace = !!(user && activeTournamentState.thirdPlace && (activeTournamentState.thirdPlace.id === user?.id || (user?.email && activeTournamentState.thirdPlace.email?.toLowerCase() === user.email.toLowerCase())));
 
   const effectiveThemeVariant: 'default' | 'gold' | 'diamond' | 'platinum' | 'goat' = 
     isChampion || user?.themeVariant === 'goat' || (user as any)?.isGoat ? 'goat' :
@@ -394,15 +560,15 @@ export default function App() {
 
   // Keep user badges and active memberships in sync
   const decoratedUser: User = {
-    ...user,
-    themeVariant: effectiveThemeVariant !== 'default' ? effectiveThemeVariant : user.themeVariant,
+    ...effectiveUser,
+    themeVariant: effectiveThemeVariant !== 'default' ? effectiveThemeVariant : (effectiveUser.themeVariant || 'default'),
     isGoat: isChampion || effectiveThemeVariant === 'goat',
     goatPrivilegesActive: isChampion || effectiveThemeVariant === 'goat',
     tournamentBadge: isChampion || effectiveThemeVariant === 'goat' || effectiveThemeVariant === 'gold' ? '1st' :
                      isRunnerUp || effectiveThemeVariant === 'diamond' ? '2nd' :
                      isThirdPlace || effectiveThemeVariant === 'platinum' ? '3rd' :
-                     user.tournamentBadge,
-    premiumPlan: (isChampion || effectiveThemeVariant === 'goat') ? 'premium' : isRunnerUp ? 'medium' : isThirdPlace ? 'basic' : user.premiumPlan
+                     user?.tournamentBadge,
+    premiumPlan: (isChampion || effectiveThemeVariant === 'goat') ? 'premium' : isRunnerUp ? 'medium' : isThirdPlace ? 'basic' : (effectiveUser.premiumPlan || 'free')
   };
 
   const activeUser = decoratedUser;
@@ -436,8 +602,8 @@ export default function App() {
         <div className="fixed inset-0 pointer-events-none -z-10 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(6,182,212,0.1),rgba(2,6,23,0))]" />
       )}
 
-      {/* EXCLUSIVE CHAMPIONS LEAGUE ACADEMIC CHAMPION REIGN BANNER */}
-      {effectiveThemeVariant === 'goat' && (
+      {/* EXCLUSIVE CHAMPIONS LEAGUE ACADEMIC CHAMPION REIGN BANNER (Only on Home view) */}
+      {currentView === 'home' && effectiveThemeVariant === 'goat' && (
         <div className="bg-gradient-to-r from-amber-950 via-yellow-900 to-amber-950 text-amber-100 py-2.5 px-4 text-center border-b-2 border-amber-400/60 text-xs font-semibold flex flex-wrap items-center justify-center gap-3 shadow-[0_0_35px_rgba(245,158,11,0.35)] relative overflow-hidden z-40">
           <div className="absolute inset-0 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px] opacity-20 pointer-events-none" />
           
@@ -485,8 +651,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Exclusive Champions League Winner Website Header Banner */}
-      {effectiveThemeVariant === 'gold' && (
+      {/* Exclusive Champions League Winner Website Header Banner (Only on Home view) */}
+      {currentView === 'home' && effectiveThemeVariant === 'gold' && (
         <div className="bg-gradient-to-r from-amber-950 via-yellow-950 to-amber-950 text-amber-200 py-2 px-4 text-center border-b border-amber-500/40 text-xs font-semibold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
           <Trophy className="w-4 h-4 text-amber-400 animate-bounce" />
           <span className="font-black tracking-wider text-amber-300">👑 NATIONAL CHAMPION GOLD THEME ACTIVE:</span>
@@ -499,7 +665,7 @@ export default function App() {
           </button>
         </div>
       )}
-      {effectiveThemeVariant === 'diamond' && (
+      {currentView === 'home' && effectiveThemeVariant === 'diamond' && (
         <div className="bg-gradient-to-r from-cyan-950 via-sky-950 to-cyan-950 text-cyan-200 py-2 px-4 text-center border-b border-cyan-400/40 text-xs font-semibold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.2)]">
           <Crown className="w-4 h-4 text-cyan-300 animate-pulse" />
           <span className="font-black tracking-wider text-cyan-300">💎 DIAMOND FINALIST THEME ACTIVE:</span>
@@ -512,7 +678,7 @@ export default function App() {
           </button>
         </div>
       )}
-      {effectiveThemeVariant === 'platinum' && (
+      {currentView === 'home' && effectiveThemeVariant === 'platinum' && (
         <div className="bg-gradient-to-r from-slate-900 via-zinc-900 to-slate-900 text-slate-200 py-2 px-4 text-center border-b border-slate-400/40 text-xs font-semibold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(203,213,225,0.15)]">
           <Award className="w-4 h-4 text-slate-300" />
           <span className="font-black tracking-wider text-slate-100">🛡️ PLATINUM PODIUM THEME ACTIVE:</span>
@@ -526,17 +692,19 @@ export default function App() {
         </div>
       )}
       
-      {/* Top Banner Non-Intrusive Sponsored Space */}
-      <div className="bg-slate-950 text-slate-300 py-1.5 px-4 text-center border-b border-cyan-500/20 text-[11px] hidden sm:flex items-center justify-center gap-2">
-        <span className="font-mono font-semibold text-cyan-400">⚡ 2026/2027 JAMB UTME & WAEC REVISION PROTOCOL:</span>
-        <span className="text-slate-300">Over 4,000 past questions, syllabus guides, and verified marking schemes available.</span>
-        <button
-          onClick={() => handleNavigate('mock-exam')}
-          className="underline font-bold text-cyan-300 hover:text-cyan-200 ml-1 cursor-pointer"
-        >
-          Launch CBT Mock →
-        </button>
-      </div>
+      {/* Top Banner Non-Intrusive Sponsored Space (Only on Home View) */}
+      {currentView === 'home' && (
+        <div className="bg-slate-950 text-slate-300 py-1.5 px-4 text-center border-b border-cyan-500/20 text-[11px] hidden sm:flex items-center justify-center gap-2">
+          <span className="font-mono font-semibold text-cyan-400">⚡ 2026/2027 JAMB UTME & WAEC REVISION PROTOCOL:</span>
+          <span className="text-slate-300">Over 4,000 past questions, syllabus guides, and verified marking schemes available.</span>
+          <button
+            onClick={() => handleNavigate('mock-exam')}
+            className="underline font-bold text-cyan-300 hover:text-cyan-200 ml-1 cursor-pointer"
+          >
+            Launch CBT Mock →
+          </button>
+        </div>
+      )}
 
       {/* Main Navbar */}
       <Navbar
@@ -555,6 +723,7 @@ export default function App() {
         onOpenCalculator={() => setIsGlobalCalculatorOpen(true)}
         unreadNotificationsCount={unreadNotifCount}
         onOpenNotifications={() => setIsNotificationModalOpen(true)}
+        onOpenHonorCode={() => setIsHonorCodeOpen(true)}
         themeMode={themeMode}
         onToggleTheme={handleToggleTheme}
       />
@@ -562,15 +731,28 @@ export default function App() {
       {/* Main Application Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         
-        {/* Top Header Ad banner (Rendered respectfully, suppressed for paid subscribers) */}
-        {currentView !== 'mock-exam' && (
+        {/* Clean Back to Home for Subpages */}
+        {currentView !== 'home' && (
+          <div className="mb-4">
+            <button
+              onClick={() => handleNavigate('home')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold transition cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>← Back to Home</span>
+            </button>
+          </div>
+        )}
+
+        {/* Top Header Ad banner (Only on Home view) */}
+        {currentView === 'home' && (
           <div className="mb-4">
             <AdBanner placement="top-banner" user={user} />
           </div>
         )}
 
-        {/* Personalized Voice Welcome Banner */}
-        {currentView !== 'mock-exam' && (
+        {/* Personalized Voice Welcome Banner (Only on Home view) */}
+        {currentView === 'home' && (
           <WelcomeVoiceBanner 
             user={user} 
             onOpenAuth={() => handleOpenAuth('login')} 
@@ -616,7 +798,31 @@ export default function App() {
               <PracticeView
                 initialSubjectId={practiceParams.subjectId}
                 initialTopic={practiceParams.topic}
+                initialCustomQuestions={customPracticeQuestions || undefined}
                 subjects={subjects}
+                user={user}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
+
+          {(currentView === 'question-grabber' || currentView === 'harvester' || currentView === 'grab-questions' || currentView === 'past-questions' || currentView === 'past-jamb' || currentView === 'jamb-archive') && (
+            <motion.div key="question-grabber" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <PastQuestionHarvesterView
+                user={user}
+                onNavigate={handleNavigate}
+                onStartPractice={(grabbedQuestions) => {
+                  setCustomPracticeQuestions(grabbedQuestions);
+                  setCurrentView('practice');
+                  window.scrollTo(0, 0);
+                }}
+              />
+            </motion.div>
+          )}
+
+          {(currentView === 'news-agent' || currentView === 'news' || currentView === 'fact-check') && (
+            <motion.div key="news-agent" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <NewsFactCheckerAgentView
                 user={user}
                 onNavigate={handleNavigate}
               />
@@ -655,6 +861,7 @@ export default function App() {
                 user={user}
                 onNavigate={handleNavigate}
                 preferredSubject={practiceParams.subjectId}
+                onOpenHonorCode={() => setIsHonorCodeOpen(true)}
               />
             </motion.div>
           )}
@@ -669,6 +876,7 @@ export default function App() {
                 onOpenAITutor={(topic, subject) => handleNavigate('ai-tutor', { topic, subject })}
                 onOpenProfile={() => setIsProfileOpen(true)}
                 onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
+                onOpenHonorCode={() => setIsHonorCodeOpen(true)}
                 initialTab={dashboardInitialTab}
               />
             </motion.div>
@@ -676,15 +884,12 @@ export default function App() {
 
           {currentView === 'leaderboard' && (
             <motion.div key="leaderboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
-              <DashboardView
-                user={user}
+              <StudentLeaderboard
+                user={activeUser}
+                subjects={subjects}
                 onNavigate={handleNavigate}
                 onOpenAuth={() => handleOpenAuth('login')}
                 onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
-                onOpenAITutor={(topic, subject) => handleNavigate('ai-tutor', { topic, subject })}
-                onOpenProfile={() => setIsProfileOpen(true)}
-                onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
-                initialTab="leaderboard"
               />
             </motion.div>
           )}
@@ -715,6 +920,7 @@ export default function App() {
                 user={activeUser}
                 onOpenAuth={handleOpenAuth}
                 onNavigate={handleNavigate}
+                onOpenHonorCode={() => setIsHonorCodeOpen(true)}
               />
             </motion.div>
           )}
@@ -761,6 +967,7 @@ export default function App() {
                 onRefreshData={loadInitialData}
                 onNavigate={handleNavigate}
                 onUserUpgraded={updatedUser => setUser(updatedUser)}
+                onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
               />
             </motion.div>
           )}
@@ -768,122 +975,129 @@ export default function App() {
 
       </main>
 
-      {/* Footer */}
-      <footer className="bg-slate-950 text-slate-400 text-xs border-t border-slate-800 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      {/* Footer (Only on Home View to keep specific views isolated & distraction-free) */}
+      {currentView === 'home' && (
+        <footer className="bg-slate-950 text-slate-400 text-xs border-t border-slate-800 mt-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
             
-            {/* Brand column */}
-            <div className="space-y-3 md:col-span-1">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-sm">
-                  SN
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              
+              {/* Brand column */}
+              <div className="space-y-3 md:col-span-1">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-sm">
+                    SN
+                  </div>
+                  <span className="font-extrabold text-white text-base tracking-tight font-['Outfit']">
+                    Study<span className="text-emerald-400">Naija</span>
+                  </span>
                 </div>
-                <span className="font-extrabold text-white text-base tracking-tight font-['Outfit']">
-                  Study<span className="text-emerald-400">Naija</span>
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Nigeria’s dedicated computer-based testing (CBT) prep platform for JAMB UTME, WAEC SSCE, and Post-UTME admission success.
-              </p>
-              <div className="text-[11px] text-emerald-400/90 font-medium">
-                🇳🇬 Built for Nigerian secondary students & tertiary aspirants.
-              </div>
-            </div>
-
-            {/* Quick Links */}
-            <div>
-              <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-3">Study Resources</h4>
-              <ul className="space-y-2 text-xs">
-                <li>
-                  <button onClick={() => handleNavigate('subjects')} className="hover:text-white transition-colors">
-                    JAMB & WAEC Subjects
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => handleNavigate('practice')} className="hover:text-white transition-colors">
-                    Daily Practice Questions
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => handleNavigate('mock-exam')} className="hover:text-white transition-colors">
-                    Timed CBT Mock Exam
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => handleNavigate('study-tips')} className="hover:text-white transition-colors">
-                    Examiner Study Tips
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => handleNavigate('stories')} className="text-amber-400 hover:text-amber-300 font-bold transition-colors flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Story Books & Literature Hub 📖</span>
-                  </button>
-                </li>
-              </ul>
-            </div>
-
-            {/* Core Subjects */}
-            <div>
-              <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-3">Core Subjects</h4>
-              <ul className="space-y-1.5 text-xs text-slate-400">
-                <li>English Language (Compulsory)</li>
-                <li>General Mathematics</li>
-                <li>Biology, Chemistry & Physics</li>
-                <li>Economics & Government</li>
-                <li>Literature & Commerce</li>
-              </ul>
-            </div>
-
-            {/* Strict Security & Compliance */}
-            <div className="space-y-2 text-xs">
-              <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Security Guarantee</span>
-              </h4>
-              <p className="text-slate-400 leading-relaxed text-[11px]">
-                <strong>Strict Non-Storage Policy:</strong> StudyNaija never requests, handles, or stores student bank card numbers, CVVs, ATM PINs, or bank OTPs. Premium access is verified securely via server tokens.
-              </p>
-              {user?.role === 'admin' && (
-                <div className="pt-2">
-                  <button
-                    onClick={() => handleNavigate('admin')}
-                    className="text-[10px] text-slate-500 hover:text-slate-300 underline"
-                  >
-                    Site Owner Admin Portal
-                  </button>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Nigeria’s dedicated computer-based testing (CBT) prep platform for JAMB UTME, WAEC SSCE, and Post-UTME admission success.
+                </p>
+                <div className="text-[11px] text-emerald-400/90 font-medium">
+                  🇳🇬 Built for Nigerian secondary students & tertiary aspirants.
                 </div>
-              )}
+              </div>
+
+              {/* Quick Links */}
+              <div>
+                <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-3">Study Resources</h4>
+                <ul className="space-y-2 text-xs">
+                  <li>
+                    <button onClick={() => handleNavigate('subjects')} className="hover:text-white transition-colors">
+                      JAMB & WAEC Subjects
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => handleNavigate('practice')} className="hover:text-white transition-colors">
+                      Daily Practice Questions
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => handleNavigate('mock-exam')} className="hover:text-white transition-colors">
+                      Timed CBT Mock Exam
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => handleNavigate('study-tips')} className="hover:text-white transition-colors">
+                      Examiner Study Tips
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => handleNavigate('stories')} className="text-amber-400 hover:text-amber-300 font-bold transition-colors flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Story Books & Literature Hub 📖</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Core Subjects */}
+              <div>
+                <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-3">Core Subjects</h4>
+                <ul className="space-y-1.5 text-xs text-slate-400">
+                  <li>English Language (Compulsory)</li>
+                  <li>General Mathematics</li>
+                  <li>Biology, Chemistry & Physics</li>
+                  <li>Economics & Government</li>
+                  <li>Literature & Commerce</li>
+                </ul>
+              </div>
+
+              {/* Strict Security & Compliance */}
+              <div className="space-y-2 text-xs">
+                <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Security Guarantee</span>
+                </h4>
+                <p className="text-slate-400 leading-relaxed text-[11px]">
+                  <strong>Strict Non-Storage Policy:</strong> StudyNaija never requests, handles, or stores student bank card numbers, CVVs, ATM PINs, or bank OTPs. Premium access is verified securely via server tokens.
+                </p>
+                {user?.role === 'admin' && (
+                  <div className="pt-2">
+                    <button
+                      onClick={() => handleNavigate('admin')}
+                      className="text-[10px] text-slate-500 hover:text-slate-300 underline"
+                    >
+                      Site Owner Admin Portal
+                    </button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px]">
+              <div>
+                © 2026 StudyNaija. All rights reserved. Not affiliated with the official Joint Admissions and Matriculation Board or the West African Examinations Council.
+              </div>
+              <div className="flex items-center gap-4 text-slate-400 flex-wrap">
+                <button onClick={() => setIsHonorCodeOpen(true)} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer">
+                  <Scale className="w-3.5 h-3.5" />
+                  <span>Scholar Honor Code & Rules</span>
+                </button>
+                <span>•</span>
+                <button onClick={() => handleNavigate('community')} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
+                  <span>🇳🇬 Student Community</span>
+                </button>
+                <span>•</span>
+                <button onClick={() => handleNavigate('verify-match')} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Verify Match Result</span>
+                </button>
+                <span>•</span>
+                <button onClick={() => handleNavigate('premium')} className="hover:text-white">Pricing Plans</button>
+                <span>•</span>
+                <button onClick={() => handleNavigate('study-tips')} className="hover:text-white">Study Tips</button>
+                <span>•</span>
+                <button onClick={() => handleOpenAuth('signup')} className="hover:text-white">Student Registration</button>
+              </div>
             </div>
 
           </div>
-
-          <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px]">
-            <div>
-              © 2026 StudyNaija. All rights reserved. Not affiliated with the official Joint Admissions and Matriculation Board or the West African Examinations Council.
-            </div>
-            <div className="flex items-center gap-4 text-slate-400">
-              <button onClick={() => handleNavigate('community')} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
-                <span>🇳🇬 Student Community</span>
-              </button>
-              <span>•</span>
-              <button onClick={() => handleNavigate('verify-match')} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Verify Match Result</span>
-              </button>
-              <span>•</span>
-              <button onClick={() => handleNavigate('premium')} className="hover:text-white">Pricing Plans</button>
-              <span>•</span>
-              <button onClick={() => handleNavigate('study-tips')} className="hover:text-white">Study Tips</button>
-              <span>•</span>
-              <button onClick={() => handleOpenAuth('signup')} className="hover:text-white">Student Registration</button>
-            </div>
-          </div>
-
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {/* Public Anti-Cheat Match Verification Modal */}
       <MatchVerificationModal
@@ -924,10 +1138,17 @@ export default function App() {
         onXpEarned={() => {}}
       />
 
-      {/* Floating WhatsApp Quick Support & Admin Desk */}
-      <WhatsAppSupport />
+      {/* Floating WhatsApp Quick Support (Only on Home to avoid covering specific views) */}
+      {currentView === 'home' && <WhatsAppSupport />}
 
-
+      {/* Floating AI Study Assistant Chatbot (Only on Home to avoid covering specific views) */}
+      {currentView === 'home' && (
+        <AIStudyAssistantChatbot
+          user={activeUser || user}
+          onNavigate={handleNavigate}
+          subjects={subjects}
+        />
+      )}
 
       {/* Offline Status & Local Cache Active Banner */}
       <OfflineIndicator />
@@ -938,6 +1159,15 @@ export default function App() {
         onClose={() => setIsProfileOpen(false)}
         user={activeUser}
         onNavigate={handleNavigate}
+        onUpdateUser={updatedUser => setUser(updatedUser)}
+        onOpenHonorCode={() => setIsHonorCodeOpen(true)}
+      />
+
+      {/* Official Scholar Honor Code, Rules & Consequences Modal */}
+      <ScholarHonorCodeModal
+        isOpen={isHonorCodeOpen}
+        onClose={() => setIsHonorCodeOpen(false)}
+        user={decoratedUser || activeUser}
         onUpdateUser={updatedUser => setUser(updatedUser)}
       />
 
@@ -950,6 +1180,12 @@ export default function App() {
         onClose={() => setIsRevocationModalOpen(false)}
         onNavigateToTournament={() => handleNavigate('tournament')}
         noticeData={revocationNotice}
+      />
+
+      {/* Admin AI Sentinel 2-Minute Admin Site Suspension Modal (Once) */}
+      <AdminSuspensionModal
+        isOpen={isAdminSuspendedOpen}
+        onUnlock={() => setIsAdminSuspendedOpen(false)}
       />
 
       {/* Google Workspace Integration Hub (Sheets, Docs, Classroom, Forms) */}

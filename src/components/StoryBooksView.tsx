@@ -26,7 +26,8 @@ import {
   Compass, 
   Zap, 
   GraduationCap,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { STORY_BOOKS, StoryBook, StoryChapter, VocabularyWord } from '../data/storyBooks';
 import { User } from '../types';
@@ -44,12 +45,14 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
   onUpdateUser
 }) => {
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const [selectedChapterCount, setSelectedChapterCount] = useState<number | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeStory, setActiveStory] = useState<StoryBook | null>(null);
   const [activeChapterIdx, setActiveChapterIdx] = useState<number>(0);
   const [readerTheme, setReaderTheme] = useState<'day' | 'sepia' | 'night' | 'oled'>('sepia');
   const [readerFontSize, setReaderFontSize] = useState<'sm' | 'md' | 'lg' | 'xl'>('md');
   const [selectedVocabWord, setSelectedVocabWord] = useState<VocabularyWord | null>(null);
+  const articleRef = useRef<HTMLElement>(null);
   
   // Bookmarks & Completion state
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(() => {
@@ -76,6 +79,17 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
   const [quizSubmitted, setQuizSubmitted] = useState<boolean>(false);
   const [quizScore, setQuizScore] = useState<number>(0);
 
+  // Story Reader Points (Reading Practice points strictly separated from CBT Exam Leaderboard)
+  const [storyReaderPoints, setStoryReaderPoints] = useState<number>(() => {
+    try {
+      if (user?.storyReaderPoints !== undefined) return user.storyReaderPoints;
+      const saved = localStorage.getItem('studynaija_story_reader_points');
+      return saved ? parseInt(saved, 10) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
   // Audio Narration (Web Speech API)
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
@@ -94,6 +108,13 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
       localStorage.setItem('studynaija_completed_stories', JSON.stringify(completedStories));
     } catch {}
   }, [completedStories]);
+
+  // Sync story reader points
+  useEffect(() => {
+    try {
+      localStorage.setItem('studynaija_story_reader_points', storyReaderPoints.toString());
+    } catch {}
+  }, [storyReaderPoints]);
 
   // Cleanup speech synthesis on unmount or story close
   useEffect(() => {
@@ -115,19 +136,20 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const storiesPerPage = 12;
 
-  // Reset page when genre or search changes
+  // Reset page when genre, chapter tier, or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedGenre, searchQuery]);
+  }, [selectedGenre, searchQuery, selectedChapterCount]);
 
   const filteredStories = STORY_BOOKS.filter(story => {
     const matchesGenre = selectedGenre === 'All' || story.genre === selectedGenre;
+    const matchesChapter = selectedChapterCount === 'All' || story.chapters.length === selectedChapterCount;
     const matchesQuery = !searchQuery || 
       story.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       story.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
       story.synopsis.toLowerCase().includes(searchQuery.toLowerCase()) ||
       story.moralLesson.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesGenre && matchesQuery;
+    return matchesGenre && matchesChapter && matchesQuery;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredStories.length / storiesPerPage));
@@ -245,16 +267,16 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
         setCompletedStories(prev => [...prev, activeStory.id]);
       }
 
-      // Award XP
+      // Award Story Reader Points ONLY (strictly separated from competitive CBT Exam Leaderboard)
+      const storyPointsEarned = 35;
+      setStoryReaderPoints(prev => prev + storyPointsEarned);
+
       if (user && onUpdateUser) {
-        const xpBonus = 35;
         const updated = {
           ...user,
-          xp: (user.xp || 0) + xpBonus,
-          stats: {
-            ...user.stats,
-            questionsSolved: (user.stats?.questionsSolved || 0) + activeStory.comprehensionQuiz.length
-          }
+          storyReaderPoints: ((user.storyReaderPoints || 0) + storyPointsEarned)
+          // Intentionally do NOT add to user.xp or user.stats.questionsAnswered/questionsSolved
+          // to ensure points earned from the story quiz do not count towards the leaderboard.
         };
         onUpdateUser(updated);
       }
@@ -356,13 +378,13 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                 </span>
                 <span className="flex items-center gap-1">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>CBT Comprehension Quizzes (+35 XP)</span>
+                  <span>CBT Comprehension Quizzes (+35 Story Pts)</span>
                 </span>
               </div>
             </div>
 
             {/* Quick Stats Widget */}
-            <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-5 text-center shrink-0 w-full md:w-auto min-w-[220px] shadow-lg">
+            <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-5 text-center shrink-0 w-full md:w-auto min-w-[240px] shadow-lg">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-2xl mx-auto mb-2">
                 📖
               </div>
@@ -370,8 +392,14 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                 {completedStories.length} / {STORY_BOOKS.length}
               </div>
               <div className="text-xs text-slate-300 font-medium">Stories Read & Quizzed</div>
-              <div className="mt-3 pt-3 border-t border-slate-800 text-[11px] text-slate-400">
-                {bookmarkedIds.length} Saved in Reading List
+              <div className="mt-2.5 pt-2.5 border-t border-slate-800 space-y-1 text-left">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Story Points:</span>
+                  <span className="font-mono font-bold text-amber-300">+{storyReaderPoints} pts</span>
+                </div>
+                <div className="text-[10px] text-slate-400 italic leading-tight">
+                  🛡️ Literary reading practice (does not count towards CBT Exam Leaderboard)
+                </div>
               </div>
             </div>
           </div>
@@ -421,7 +449,7 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
           </div>
 
           {/* Genre Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {genres.map(genre => (
               <button
                 key={genre}
@@ -433,6 +461,33 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                 }`}
               >
                 {genre}
+              </button>
+            ))}
+          </div>
+
+          {/* Chapter Length Filter Pills (10, 20, 24, 27, 50 Chapters) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+            <span className="text-slate-400 font-mono text-[11px] font-bold uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+              <span>📖 Chapter Length:</span>
+            </span>
+            {[
+              { id: 'All', label: 'All Lengths' },
+              { id: 10, label: '10 Chapters' },
+              { id: 20, label: '20 Chapters' },
+              { id: 24, label: '24 Chapters' },
+              { id: 27, label: '27 Chapters' },
+              { id: 50, label: '50 Chapters (Epic Sagas)' }
+            ].map(tier => (
+              <button
+                key={tier.id}
+                onClick={() => setSelectedChapterCount(tier.id as any)}
+                className={`px-3 py-1 rounded-xl font-bold transition whitespace-nowrap cursor-pointer text-xs ${
+                  selectedChapterCount === tier.id
+                    ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                {tier.label}
               </button>
             ))}
           </div>
@@ -471,9 +526,14 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                         {story.icon}
                       </div>
                       <div>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/15 text-white uppercase tracking-wider">
-                          {story.genre}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/15 text-white uppercase tracking-wider">
+                            {story.genre}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-amber-400 text-slate-950 shadow-xs">
+                            {story.chapters.length} Chapters
+                          </span>
+                        </div>
                         <div className="text-xs text-slate-300 font-medium mt-1">
                           By {story.author}
                         </div>
@@ -542,8 +602,8 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                         <span>Completed & Tested</span>
                       </span>
                     ) : (
-                      <span className="text-[11px] text-slate-500">
-                        +35 XP on Quiz Completion
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        +35 Story Pts on Quiz
                       </span>
                     )}
 
@@ -752,21 +812,91 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
             </div>
           </div>
 
-          {/* Chapter Tabs & Comprehension Quiz Switcher */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 overflow-x-auto gap-2">
-            <div className="flex items-center gap-1.5">
-              {activeStory.chapters.map((ch, idx) => (
+          {/* Chapter Navigation & Comprehension Quiz Switcher Bar */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shadow-lg">
+            
+            <div className="flex items-center gap-2 flex-1">
+              {/* Previous Chapter button */}
+              <button
+                disabled={activeChapterIdx === 0}
+                onClick={() => {
+                  if (activeChapterIdx > 0) {
+                    setActiveChapterIdx(prev => prev - 1);
+                    setQuizActive(false);
+                    if (isSpeaking) handleStopSpeech();
+                    articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white transition cursor-pointer shrink-0"
+                title="Previous Chapter"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              {/* Direct Chapter Dropdown Selector */}
+              <div className="relative flex-1 max-w-sm">
+                <select
+                  value={activeChapterIdx}
+                  onChange={(e) => {
+                    const idx = Number(e.target.value);
+                    setActiveChapterIdx(idx);
+                    setQuizActive(false);
+                    if (isSpeaking) handleStopSpeech();
+                    articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                  className="w-full appearance-none px-3.5 py-2 pr-8 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm font-bold text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-inner"
+                >
+                  {activeStory.chapters.map((ch, idx) => (
+                    <option key={idx} value={idx}>
+                      Chapter {idx + 1} of {activeStory.chapters.length}: {ch.title.replace(/^Chapter \d+:\s*/, '')}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+                  ▼
+                </div>
+              </div>
+
+              {/* Next Chapter button */}
+              <button
+                disabled={activeChapterIdx === activeStory.chapters.length - 1}
+                onClick={() => {
+                  if (activeChapterIdx < activeStory.chapters.length - 1) {
+                    setActiveChapterIdx(prev => prev + 1);
+                    setQuizActive(false);
+                    if (isSpeaking) handleStopSpeech();
+                    articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white transition cursor-pointer shrink-0"
+                title="Next Chapter"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {/* Chapter Progress pill */}
+              <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/60 border border-emerald-500/30 rounded-xl text-xs font-mono font-bold text-emerald-300">
+                <span>{activeChapterIdx + 1}/{activeStory.chapters.length} Chs</span>
+                <span className="text-slate-400">•</span>
+                <span>{Math.round(((activeChapterIdx + 1) / activeStory.chapters.length) * 100)}% Read</span>
+              </div>
+            </div>
+
+            {/* Quick Chapter Pill Rail (scrollable) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full md:max-w-md scrollbar-none">
+              {activeStory.chapters.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => {
                     setActiveChapterIdx(idx);
                     setQuizActive(false);
                     if (isSpeaking) handleStopSpeech();
+                    articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
                     !quizActive && activeChapterIdx === idx
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'bg-slate-900 hover:bg-slate-850 text-slate-400 border border-slate-800'
+                      ? 'bg-emerald-600 text-white shadow-md font-black'
+                      : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 border border-slate-700/50'
                   }`}
                 >
                   <span>Ch. {idx + 1}</span>
@@ -774,19 +904,21 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
               ))}
             </div>
 
+            {/* Comprehension Quiz Button */}
             <button
               onClick={() => {
                 setQuizActive(true);
                 if (isSpeaking) handleStopSpeech();
+                articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-md ${
                 quizActive
                   ? 'bg-amber-500 text-slate-950 shadow-md font-black'
-                  : 'bg-slate-900 hover:bg-slate-850 text-amber-300 border border-amber-500/30'
+                  : 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950'
               }`}
             >
               <HelpCircle className="w-4 h-4" />
-              <span>Comprehension Quiz (+35 XP)</span>
+              <span>Quiz (+35 Story Pts)</span>
             </button>
           </div>
 
@@ -820,7 +952,7 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
 
           {/* Main Book Paper Sheet */}
           {!quizActive ? (
-            <article className={`p-6 sm:p-12 rounded-3xl shadow-2xl border ${currentTheme.bg} ${currentTheme.text} ${currentTheme.border} space-y-6 transition-colors duration-200`}>
+            <article ref={articleRef} className={`p-6 sm:p-12 rounded-3xl shadow-2xl border ${currentTheme.bg} ${currentTheme.text} ${currentTheme.border} space-y-6 transition-colors duration-200`}>
               
               {/* Story Header */}
               <header className="border-b pb-6 space-y-2 border-current/20">
@@ -879,31 +1011,37 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
               </div>
 
               {/* Navigation Between Chapters */}
-              <div className="flex items-center justify-between pt-6 border-t border-current/20">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-6 border-t border-current/20">
                 {activeChapterIdx > 0 ? (
                   <button
                     onClick={() => {
                       setActiveChapterIdx(prev => prev - 1);
                       if (isSpeaking) handleStopSpeech();
+                      articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Previous Chapter</span>
+                    <span>Previous: Chapter {activeChapterIdx}</span>
                   </button>
                 ) : (
                   <div />
                 )}
+
+                <div className="text-center font-mono text-xs font-bold opacity-75 hidden sm:block">
+                  Chapter {activeChapterIdx + 1} of {activeStory.chapters.length} ({Math.round(((activeChapterIdx + 1) / activeStory.chapters.length) * 100)}% Complete)
+                </div>
 
                 {activeChapterIdx < activeStory.chapters.length - 1 ? (
                   <button
                     onClick={() => {
                       setActiveChapterIdx(prev => prev + 1);
                       if (isSpeaking) handleStopSpeech();
+                      articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 text-white hover:bg-emerald-500 transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 text-white hover:bg-emerald-500 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                   >
-                    <span>Next Chapter</span>
+                    <span>Next: Chapter {activeChapterIdx + 2}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 ) : (
@@ -911,11 +1049,12 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                     onClick={() => {
                       setQuizActive(true);
                       if (isSpeaking) handleStopSpeech();
+                      articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 transition flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105"
+                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 transition flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:scale-105"
                   >
                     <HelpCircle className="w-4 h-4" />
-                    <span>Take Comprehension Quiz (+35 XP) →</span>
+                    <span>Finished All {activeStory.chapters.length} Chapters! Take Story Quiz (+35 Story Pts) →</span>
                   </button>
                 )}
               </div>
@@ -923,17 +1062,25 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
           ) : (
             /* COMPREHENSION QUIZ SCREEN */
             <div className="bg-slate-900 rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-2xl space-y-6 text-white">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 gap-3">
                 <div>
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
-                    CBT Comprehension & Literary Analysis
-                  </span>
-                  <h2 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white mt-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                      CBT Comprehension & Literary Analysis
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold">
+                      Does Not Count Towards Leaderboard
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white mt-1">
                     Quiz: {activeStory.title}
                   </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Test your reading retention. Points earned here award Story Reader Points and do not count towards the competitive CBT Exam Leaderboard.
+                  </p>
                 </div>
-                <div className="text-right">
-                  <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold">
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold inline-block">
                     4 Questions • Passing: 3/4
                   </span>
                 </div>
@@ -1020,7 +1167,7 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                 {!quizSubmitted ? (
                   <>
                     <span className="text-xs text-slate-400">
-                      Answer all 4 questions to verify your comprehension and earn +35 XP.
+                      Answer all 4 questions to verify your comprehension and earn +35 Story Reader Points.
                     </span>
                     <button
                       onClick={handleSubmitQuiz}
@@ -1042,9 +1189,14 @@ export const StoryBooksView: React.FC<StoryBooksViewProps> = ({
                         </div>
                         <div className="text-xs text-slate-300">
                           {quizScore >= 3 
-                            ? '🎉 Superb comprehension! You earned +35 Merit XP!' 
+                            ? '🎉 Superb comprehension! You earned +35 Story Reader Points!' 
                             : 'Review the story chapters and try again to master this text!'}
                         </div>
+                        {quizScore >= 3 && (
+                          <div className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-300 font-medium">
+                            <span>🛡️ Reading Practice: Points do not count towards competitive CBT Exam Leaderboard</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 

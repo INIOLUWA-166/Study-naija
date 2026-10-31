@@ -27,7 +27,9 @@ import {
   Smile,
   ShieldCheck,
   Gift,
-  Crown
+  Crown,
+  Globe,
+  Newspaper
 } from 'lucide-react';
 import { Subject, User, PredictedScoreData } from '../types';
 import { AdBanner } from './AdBanner';
@@ -43,6 +45,7 @@ import { LobbyCalculatorCard } from './LobbyCalculatorCard';
 import { ScientificCalculator } from './ScientificCalculator';
 import { StudentWelcomeGuideCard } from './StudentWelcomeGuideCard';
 import { StoryBooksLobbySection } from './StoryBooksLobbySection';
+import { JambCountdownTimer } from './JambCountdownTimer';
 
 interface HomeViewProps {
   subjects: Subject[];
@@ -83,21 +86,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Real-time predicted score diagnostic preview
   const predictedScore: PredictedScoreData = calculatePredictedScore([], user);
 
-  // Friendly countdown to upcoming Nigerian UTME exam
-  const [countdown, setCountdown] = useState({ days: 42, hours: 14, minutes: 28, seconds: 45 });
   const seasonInfo = getMonthlySeasonInfo();
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
-        if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
-        if (prev.hours > 0) return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return { ...prev, days: Math.max(0, prev.days - 1), hours: 23, minutes: 59, seconds: 59 };
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const handleFilterClick = (filter: 'ALL' | 'JAMB' | 'WAEC') => {
     if (setActiveExamFilter) {
@@ -162,10 +151,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <span>Nigeria's Premier Study Companion</span>
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-xs font-medium">
-              <Clock className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-              <span>2026 JAMB UTME: <strong>{countdown.days} days, {countdown.hours} hrs left</strong></span>
-            </div>
+            <JambCountdownTimer variant="pill" onNavigate={onNavigate} />
           </div>
 
           {/* Student Welcome Headline */}
@@ -240,65 +226,277 @@ export const HomeView: React.FC<HomeViewProps> = ({
       </section>
 
       {/* ========================================================================= */}
-      {/* MONTHLY STUDENT PRIZE BOARD (1ST TO 5TH PLACE AIRTIME & VIP PASSES) */}
+      {/* OFFICIAL JAMB UTME VISUAL COUNTDOWN TIMER (FETCHED FROM MOCK CONFIG) */}
       {/* ========================================================================= */}
-      <section className="bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-200 rounded-3xl p-6 sm:p-8 border-2 border-amber-300 text-slate-950 shadow-md relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-slate-950 text-amber-300 text-xs font-mono font-black flex items-center gap-1.5 shadow-xs">
-                <Gift className="w-3.5 h-3.5 text-amber-400" />
-                <span>{seasonInfo.seasonTitle}</span>
-              </span>
-              <span className="px-2.5 py-1 rounded-full bg-emerald-700 text-white text-xs font-bold shadow-xs">
-                🇳🇬 Monthly Airtime Rewards
-              </span>
+      <JambCountdownTimer variant="home" onNavigate={onNavigate} />
+
+      {/* ========================================================================= */}
+      {/* 1. CHOOSE A SUBJECT TO PRACTICE (FIRST THING STUDENTS SEE) */}
+      {/* ========================================================================= */}
+      <section id="featured-subjects-section" className="space-y-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 mb-2">
+              <BookOpen className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Direct CBT Practice Catalog</span>
             </div>
-
-            <h3 className="text-xl sm:text-2xl font-black font-['Outfit'] text-slate-950 tracking-tight">
-              Top 5 Students Win Free Phone Airtime Every Month! 🎁
-            </h3>
-
-            <p className="text-xs sm:text-sm text-slate-800 font-medium leading-relaxed">
-              Study hard, solve past questions, and climb the leaderboard! Every <strong>1st day of the month</strong>, the race resets and winners receive recharge airtime for MTN, Airtel, Glo, or 9mobile!
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 font-['Outfit']">
+              Choose a Subject to Practice
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Showing {filteredSubjects.length} subjects for {activeExamFilter === 'ALL' ? 'JAMB & WAEC' : activeExamFilter}. Click any subject to begin solving real questions.
             </p>
-
-            {/* Clear Prize Tier Pills */}
-            <div className="flex flex-wrap gap-2 pt-1">
-              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
-                🥇 1st: ₦2,000 Airtime + VIP
-              </span>
-              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
-                🥈 2nd: ₦1,500 Airtime + VIP
-              </span>
-              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
-                🥉 3rd: ₦1,000 Airtime
-              </span>
-              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
-                🏅 4th & 5th: ₦500 Airtime
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-slate-700 pt-1 font-semibold">
-              <Clock className="w-3.5 h-3.5 text-slate-900" />
-              <span>Current race ends in <strong>{seasonInfo.daysRemaining} days, {seasonInfo.hoursRemaining} hours</strong> on {seasonInfo.resetDateString}!</span>
-            </div>
           </div>
 
-          <div className="w-full md:w-auto shrink-0">
-            <button
-              onClick={() => onNavigate('leaderboard')}
-              className="w-full sm:w-auto px-6 py-3.5 bg-slate-950 hover:bg-slate-900 text-white font-black text-xs sm:text-sm rounded-2xl shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer"
+          {/* Quick Subject Search Bar */}
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search Mathematics, English, Biology, Physics..."
+              value={subjectSearchQuery}
+              onChange={e => setSubjectSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-xs font-medium"
+            />
+          </div>
+        </div>
+
+        {/* Subjects Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredSubjects.map(subject => (
+            <div
+              key={subject.id}
+              id={`subject-card-${subject.id}`}
+              className="bg-white rounded-3xl p-5 border border-slate-200/90 hover:border-emerald-500/60 hover:shadow-lg transition-all flex flex-col justify-between group"
             >
-              <Trophy className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>View Leaderboard & Standings</span>
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-mono">
+                    {subject.code}
+                  </span>
+                  <span className="text-xs font-medium text-slate-500">
+                    {subject.questionCount}+ Questions
+                  </span>
+                </div>
+
+                <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                  {subject.name}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                  {subject.description}
+                </p>
+
+                {/* Popular Topics Preview */}
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex flex-wrap gap-1">
+                    {subject.topics.slice(0, 2).map((t, idx) => (
+                      <span key={idx} className="text-[11px] px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md truncate max-w-[140px] border border-slate-100">
+                        {t}
+                      </span>
+                    ))}
+                    {subject.topics.length > 2 && (
+                      <span className="text-[11px] px-1.5 py-0.5 bg-slate-50 text-slate-400 rounded-md font-medium">
+                        +{subject.topics.length - 2} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-4 pt-3 flex items-center gap-2">
+                <button
+                  onClick={() => onNavigate('practice', { subjectId: subject.id })}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  <span>Start Practice</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('mock-exam', { preferredSubject: subject.id })}
+                  className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  title="Mock Exam on this subject"
+                >
+                  Mock
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {filteredSubjects.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
+            <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+            <div className="text-sm font-bold text-slate-700">No subjects found matching "{subjectSearchQuery}"</div>
+            <button
+              onClick={() => setSubjectSearchQuery('')}
+              className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
+            >
+              Clear search and view all subjects
             </button>
           </div>
+        )}
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 2. 5 CORE STUDY PATHS (STUDENT FRIENDLY QUICK-START) */}
+      {/* ========================================================================= */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-['Outfit']">
+            What would you like to do today?
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Choose your learning mode to start practicing immediately.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          
+          {/* Card 1: Practice Past Questions */}
+          <div 
+            onClick={() => onNavigate('practice')}
+            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+                <BookOpen className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
+                Practice Past Questions
+              </h3>
+              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                Pick any subject, solve questions at your own pace, and view detailed step-by-step explanations.
+              </p>
+            </div>
+            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
+              <span>Start Practicing</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </div>
+          </div>
+
+          {/* Card 2: Full CBT Mock Exam */}
+          <div 
+            onClick={() => onNavigate('mock-exam')}
+            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+                <Timer className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
+                Full CBT Mock Exam
+              </h3>
+              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                Experience the real JAMB hall. 4 subjects, official 8-key keyboard controls, and real-time timer countdown.
+              </p>
+            </div>
+            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
+              <span>Take Mock Exam</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </div>
+          </div>
+
+          {/* Card 3: Ask Naija AI */}
+          <div 
+            onClick={() => onNavigate('ai-tutor')}
+            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+                <Sparkles className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
+                Ask Naija AI
+              </h3>
+              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                Stuck on a difficult concept? Naija AI breaks it down step-by-step with proofs, past questions, and voice audio.
+              </p>
+            </div>
+            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
+              <span>Chat with Naija AI</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </div>
+          </div>
+
+          {/* Card 4: Search Past Questions Archive */}
+          <div 
+            onClick={() => onNavigate('question-grabber')}
+            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+                <Search className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
+                Past Questions Search
+              </h3>
+              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                Search over 2,500+ past questions by keyword, topic, or year with instant answers and solutions.
+              </p>
+            </div>
+            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
+              <span>Search Archive</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </div>
+          </div>
+
+          {/* Card 5: 1v1 Challenge Arena */}
+          <div 
+            onClick={() => onNavigate('arena-1v1')}
+            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+                <Swords className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
+                1v1 Quiz Arena
+              </h3>
+              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                Play a friendly 5-question match against another student. Win games, climb the ranks, and earn rewards!
+              </p>
+            </div>
+            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
+              <span>Play Quiz Match</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </div>
+          </div>
+
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* 3-STEP STUDENT SUCCESS GUIDE (MAKES THE PORTAL 100% CLEAR) */}
+      {/* 3. DAILY STUDY GOALS & STREAK (MOTIVATIONAL & CLEAN) */}
+      {/* ========================================================================= */}
+      <section id="lobby-goals-streak" className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-['Outfit']">
+              Your Daily Study Habit
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Solve a few questions daily to build confidence and retain what you read.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate('dashboard')}
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 hover:underline cursor-pointer"
+          >
+            <span>View Dashboard</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Dual Column: Daily Goals & Streak */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <DailyStudyGoals user={user} onNavigate={onNavigate} />
+          <DailyStreakCounter user={user} onNavigate={onNavigate} />
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 4. 3-STEP STUDENT SUCCESS GUIDE */}
       {/* ========================================================================= */}
       <StudentWelcomeGuideCard
         user={user}
@@ -308,7 +506,84 @@ export const HomeView: React.FC<HomeViewProps> = ({
       />
 
       {/* ========================================================================= */}
-      {/* STORY BOOKS & LITERATURE CORNER (STUDENT LOBBY FEATURE) */}
+      {/* 5. UNIVERSAL PAST QUESTION HARVESTER */}
+      {/* ========================================================================= */}
+      <section className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 border border-cyan-500/40 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl text-center md:text-left">
+            <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 uppercase tracking-wider flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+                <span>PAST EXAMS ARCHIVE</span>
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300">
+                JAMB UTME
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-300">
+                WAEC SSCE
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/20 text-blue-300">
+                NECO SSCE
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white">
+              Search & Browse Past JAMB Questions
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Search over <strong>2,500+ official JAMB UTME & WAEC past questions</strong> directly on screen! Filter by year (2012–2026), subject, and topic with instant multiple-choice answers, marking schemes, and step-by-step teacher solutions.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate('question-grabber')}
+            className="w-full md:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-xl hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          >
+            <Search className="w-4 h-4" />
+            <span>Search Past Questions →</span>
+          </button>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 6. REAL-TIME NEWS & LIVE FACT-CHECKER AGENT */}
+      {/* ========================================================================= */}
+      <section className="bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 rounded-3xl p-6 sm:p-8 border-2 border-emerald-500/50 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl text-center md:text-left">
+            <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
+                <Newspaper className="w-3.5 h-3.5 text-emerald-400" />
+                <span>LIVE GOOGLE SEARCH AGENT</span>
+              </span>
+              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-400 text-slate-950">
+                REAL-TIME FACT CHECK
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white">
+              Real-Time News & Live Fact-Checker Agent 📰
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Powered by <strong>Google Search Grounding</strong>. Ask about official 2026 JAMB registration dates, WAEC exam timetables, cutoff marks, ASUU news, university admission portals, or verify viral educational rumours with cited sources & audio narration!
+            </p>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1 text-xs text-emerald-200 font-medium">
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-900/60 border border-emerald-700/50">⚡ JAMB 2026 Direct Entry</span>
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-900/60 border border-emerald-700/50">📜 WAEC Timetable</span>
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-900/60 border border-emerald-700/50">🇳🇬 Nigerian Current Affairs</span>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('news-agent')}
+            className="w-full md:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-xl shadow-emerald-500/20 hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          >
+            <Newspaper className="w-4 h-4 text-slate-950" />
+            <span>Launch Fact-Checker Agent →</span>
+          </button>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 7. STUDENT STORY BOOKS & LITERATURE CORNER */}
       {/* ========================================================================= */}
       <StoryBooksLobbySection
         onNavigate={onNavigate}
@@ -318,7 +593,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       />
 
       {/* ========================================================================= */}
-      {/* MONTHLY CHAMPIONS LEAGUE TOURNAMENT SHOWCASE (LOBBY FEATURE) */}
+      {/* 8. MONTHLY CHAMPIONS LEAGUE TOURNAMENT SHOWCASE */}
       {/* ========================================================================= */}
       <section id="lobby-champions-league" className="bg-gradient-to-r from-amber-950/90 via-yellow-950/80 to-slate-950 rounded-3xl p-6 sm:p-8 border-2 border-amber-500/50 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-amber-500/20 via-yellow-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
@@ -376,12 +651,70 @@ export const HomeView: React.FC<HomeViewProps> = ({
       </section>
 
       {/* ========================================================================= */}
-      {/* LOBBY CBT SCIENTIFIC CALCULATOR CARD */}
+      {/* 9. MONTHLY STUDENT PRIZE BOARD */}
+      {/* ========================================================================= */}
+      <section className="bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-200 rounded-3xl p-6 sm:p-8 border-2 border-amber-300 text-slate-950 shadow-md relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2.5 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 rounded-full bg-slate-950 text-amber-300 text-xs font-mono font-black flex items-center gap-1.5 shadow-xs">
+                <Gift className="w-3.5 h-3.5 text-amber-400" />
+                <span>{seasonInfo.seasonTitle}</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-700 text-white text-xs font-bold shadow-xs">
+                🇳🇬 Monthly Airtime Rewards
+              </span>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-black font-['Outfit'] text-slate-950 tracking-tight">
+              Top 5 Students Win Free Phone Airtime Every Month! 🎁
+            </h3>
+
+            <p className="text-xs sm:text-sm text-slate-800 font-medium leading-relaxed">
+              Study hard, solve past questions, and climb the leaderboard! Every <strong>1st day of the month</strong>, the race resets and winners receive recharge airtime for MTN, Airtel, Glo, or 9mobile!
+            </p>
+
+            {/* Clear Prize Tier Pills */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
+                🥇 1st: ₦2,000 Airtime + VIP
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
+                🥈 2nd: ₦1,500 Airtime + VIP
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
+                🥉 3rd: ₦1,000 Airtime
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-white/90 text-slate-950 text-xs font-black shadow-2xs border border-amber-200">
+                🏅 4th & 5th: ₦500 Airtime
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-700 pt-1 font-semibold">
+              <Clock className="w-3.5 h-3.5 text-slate-900" />
+              <span>Current race ends in <strong>{seasonInfo.daysRemaining} days, {seasonInfo.hoursRemaining} hours</strong> on {seasonInfo.resetDateString}!</span>
+            </div>
+          </div>
+
+          <div className="w-full md:w-auto shrink-0">
+            <button
+              onClick={() => onNavigate('leaderboard')}
+              className="w-full sm:w-auto px-6 py-3.5 bg-slate-950 hover:bg-slate-900 text-white font-black text-xs sm:text-sm rounded-2xl shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Trophy className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>View Leaderboard & Standings</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 10. LOBBY CBT SCIENTIFIC CALCULATOR CARD */}
       {/* ========================================================================= */}
       <LobbyCalculatorCard onOpenFullCalculator={handleOpenCalculator} />
 
       {/* ========================================================================= */}
-      {/* OFFICIAL RANKED VS UNRANKED MODES DIRECTORY */}
+      {/* 11. OFFICIAL RANKED VS UNRANKED MODES DIRECTORY */}
       {/* ========================================================================= */}
       <RankedModesDirectory
         onNavigate={onNavigate}
@@ -389,325 +722,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         onOpenFlashChallenge={onOpenFlashChallenge}
         onOpenOfflinePacks={onOpenOfflinePacks}
       />
-
-      {/* ========================================================================= */}
-      {/* 5 CORE STUDY PATHS (STUDENT FRIENDLY QUICK-START) */}
-      {/* ========================================================================= */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-['Outfit']">
-            What would you like to do today?
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Choose your learning mode to start practicing immediately.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          
-          {/* Card 1: Champions League (Highlighted) */}
-          <div 
-            onClick={() => onNavigate('tournament')}
-            className="group bg-gradient-to-b from-amber-950/80 via-slate-900 to-slate-950 rounded-3xl p-6 border-2 border-amber-500/50 hover:border-amber-400 shadow-md hover:shadow-xl hover:shadow-amber-500/10 transition-all cursor-pointer flex flex-col justify-between text-white"
-          >
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
-                <Trophy className="w-6 h-6 animate-pulse" />
-              </div>
-              <div>
-                <span className="text-[10px] font-mono font-bold text-amber-300 uppercase tracking-wider">Starts 12th • Top 32</span>
-                <h3 className="text-lg font-black text-amber-300 group-hover:text-amber-200 transition-colors">
-                  Champions League
-                </h3>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Compete in 8 groups, 1v1 knockouts, and win up to ₦5,000 cash, free VIP & gold site themes!
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-black text-amber-400 group-hover:gap-1.5 transition-all">
-              <span>Enter Tournament</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </div>
-          </div>
-          
-          {/* Card 1: Practice Past Questions (Turned Gold) */}
-          <div 
-            onClick={() => onNavigate('practice')}
-            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
-          >
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                <BookOpen className="w-6 h-6 stroke-[2.5]" />
-              </div>
-              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
-                Practice Past Questions
-              </h3>
-              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
-                Pick any subject, solve questions at your own pace, and view detailed step-by-step explanations.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
-              <span>Start Practicing</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </div>
-          </div>
-
-          {/* Card 2: Timed Mock Exam (Turned Gold) */}
-          <div 
-            onClick={() => onNavigate('mock-exam')}
-            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
-          >
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                <Timer className="w-6 h-6 stroke-[2.5]" />
-              </div>
-              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
-                Full CBT Mock Exam
-              </h3>
-              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
-                Experience the real JAMB hall. 4 subjects, official 8-key keyboard controls, and real-time timer countdown.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
-              <span>Take Mock Exam</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </div>
-          </div>
-
-          {/* Card 3: Naija AI & Voice (Turned Gold) */}
-          <div 
-            onClick={() => onNavigate('ai-tutor')}
-            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
-          >
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                <Sparkles className="w-6 h-6 stroke-[2.5]" />
-              </div>
-              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
-                Ask Naija AI
-              </h3>
-              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
-                Stuck on a difficult concept? Naija AI breaks it down step-by-step with proofs, past questions, and voice audio.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
-              <span>Chat with Naija AI</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </div>
-          </div>
-
-          {/* Card 4: 1v1 Challenge Arena (Turned Gold) */}
-          <div 
-            onClick={() => onNavigate('arena-1v1')}
-            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
-          >
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                <Swords className="w-6 h-6 stroke-[2.5]" />
-              </div>
-              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
-                1v1 Student Quiz Arena
-              </h3>
-              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
-                Play a friendly 5-question match against another student. Win games, climb the ranks, and earn rewards!
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
-              <span>Play Quiz Match</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* DAILY STUDY GOALS & STREAK (MOTIVATIONAL & CLEAN) */}
-      {/* ========================================================================= */}
-      <section id="lobby-goals-streak" className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-['Outfit']">
-              Your Daily Study Habit
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Solve a few questions daily to build confidence and retain what you read.
-            </p>
-          </div>
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 hover:underline cursor-pointer"
-          >
-            <span>View Dashboard</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Dual Column: Daily Goals & Streak */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <DailyStudyGoals user={user} onNavigate={onNavigate} />
-          <DailyStreakCounter user={user} onNavigate={onNavigate} />
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* STUDENT STORY BOOKS & LITERATURE HUB (NEW) */}
-      {/* ========================================================================= */}
-      <section id="lobby-story-books" className="rounded-3xl bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 border-2 border-emerald-500/40 p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-                <span>STUDENT STORY BOOKS & LITERATURE</span>
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-400/40">
-                Audio Narration & Quizzes
-              </span>
-            </div>
-
-            <h3 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white">
-              Engaging Original Stories for Nigerian Scholars 📖
-            </h3>
-
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Read captivating short stories designed to boost your English lexis, comprehension speed, and moral wisdom. 
-              Featuring African science fiction, campus mysteries, historical STEM heroes, and classic folklore!
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300 font-medium">
-              <span className="flex items-center gap-1">
-                <span>⚡ The Quantum Calabash</span>
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <span>🕵️ Midnight Organ of Hall 4</span>
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <span>🐢 Ijapa & River of Wisdom</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="shrink-0 w-full md:w-auto">
-            <button
-              onClick={() => onNavigate('stories')}
-              className="w-full md:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 hover:scale-105 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <BookOpen className="w-5 h-5 text-slate-950" />
-              <span>EXPLORE STORY BOOKS</span>
-              <ArrowRight className="w-4 h-4 text-slate-950" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* FEATURED SUBJECTS LIST WITH QUICK SEARCH */}
-      {/* ========================================================================= */}
-      <section id="featured-subjects-section" className="space-y-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-['Outfit']">
-              Choose a Subject to Practice
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Showing {filteredSubjects.length} subjects for {activeExamFilter === 'ALL' ? 'JAMB & WAEC' : activeExamFilter}.
-            </p>
-          </div>
-
-          {/* Quick Subject Search Bar */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search subject or topic..."
-              value={subjectSearchQuery}
-              onChange={e => setSubjectSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-xs"
-            />
-          </div>
-        </div>
-
-        {/* Subjects Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredSubjects.map(subject => (
-            <div
-              key={subject.id}
-              id={`subject-card-${subject.id}`}
-              className="bg-white rounded-3xl p-5 border border-slate-200/90 hover:border-emerald-500/60 hover:shadow-md transition-all flex flex-col justify-between group"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-mono">
-                    {subject.code}
-                  </span>
-                  <span className="text-xs font-medium text-slate-500">
-                    {subject.questionCount}+ Questions
-                  </span>
-                </div>
-
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
-                  {subject.name}
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                  {subject.description}
-                </p>
-
-                {/* Popular Topics Preview */}
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <div className="flex flex-wrap gap-1">
-                    {subject.topics.slice(0, 2).map((t, idx) => (
-                      <span key={idx} className="text-[11px] px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md truncate max-w-[140px] border border-slate-100">
-                        {t}
-                      </span>
-                    ))}
-                    {subject.topics.length > 2 && (
-                      <span className="text-[11px] px-1.5 py-0.5 bg-slate-50 text-slate-400 rounded-md font-medium">
-                        +{subject.topics.length - 2} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mt-4 pt-3 flex items-center gap-2">
-                <button
-                  onClick={() => onNavigate('practice', { subjectId: subject.id })}
-                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <PlayCircle className="w-3.5 h-3.5" />
-                  <span>Practice</span>
-                </button>
-                <button
-                  onClick={() => onNavigate('mock-exam', { preferredSubject: subject.id })}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                  title="Mock Exam on this subject"
-                >
-                  Mock
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {filteredSubjects.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
-            <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
-            <div className="text-sm font-bold text-slate-700">No subjects found matching "{subjectSearchQuery}"</div>
-            <button
-              onClick={() => setSubjectSearchQuery('')}
-              className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
-            >
-              Clear search and view all subjects
-            </button>
-          </div>
-        )}
-      </section>
 
       {/* ========================================================================= */}
       {/* STUDENT BONUS TOOLS ROW (PRACTICE BOOSTER PACKS) */}

@@ -1,0 +1,418 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents a registered student or scholar profile on StudyNaija.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique Firebase Auth UID of the user.",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Full student name.",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified email address of the user.",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "User privilege role."
+        },
+        "targetExam": {
+          "type": "string",
+          "enum": ["JAMB", "WAEC", "NECO", "BOTH", "COMMON_ENTRANCE", "UNIVERSITY_GST"],
+          "description": "Target Nigerian examination."
+        },
+        "educationLevel": {
+          "type": "string",
+          "enum": ["primary", "secondary", "university"],
+          "description": "Current educational institution level."
+        },
+        "targetCourse": {
+          "type": "string",
+          "description": "Target course of study (e.g. Medicine, Law).",
+          "maxLength": 150
+        },
+        "premiumPlan": {
+          "type": "string",
+          "enum": ["free", "basic", "medium", "premium"],
+          "description": "Access tier subscription level."
+        },
+        "xp": {
+          "type": "number",
+          "description": "Gamification academic merit points."
+        },
+        "streakDays": {
+          "type": "number",
+          "description": "Consecutive days of active practice."
+        },
+        "lastActiveDate": {
+          "type": "string",
+          "description": "ISO timestamp or YYYY-MM-DD of last activity.",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when account was created.",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of last profile update.",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "name", "email", "role", "targetExam", "educationLevel", "premiumPlan"]
+    },
+    "ExamResultRecord": {
+      "title": "ExamResultRecord",
+      "description": "Persistent record of a completed CBT practice set or mock exam.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the exam result.",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student who sat the exam.",
+          "maxLength": 128
+        },
+        "examType": {
+          "type": "string",
+          "enum": ["JAMB", "WAEC", "COMMON_ENTRANCE", "UNIVERSITY_GST"],
+          "description": "Type of exam taken."
+        },
+        "title": {
+          "type": "string",
+          "description": "Descriptive title of the exam session.",
+          "maxLength": 150
+        },
+        "durationMinutes": {
+          "type": "number",
+          "description": "Allotted duration in minutes."
+        },
+        "timeSpentSeconds": {
+          "type": "number",
+          "description": "Actual elapsed time in seconds."
+        },
+        "totalQuestions": {
+          "type": "number",
+          "description": "Total number of questions in the test."
+        },
+        "correctCount": {
+          "type": "number",
+          "description": "Number of correctly answered questions."
+        },
+        "scorePercentage": {
+          "type": "number",
+          "description": "Percentage score achieved (0-100)."
+        },
+        "jambScore": {
+          "type": "number",
+          "description": "Scaled score on 400-point scale for JAMB simulations."
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO timestamp of exam completion.",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO creation timestamp.",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "userId", "examType", "title", "totalQuestions", "correctCount", "scorePercentage"]
+    },
+    "UserBookmark": {
+      "title": "UserBookmark",
+      "description": "A saved past question bookmarked by the student for revision.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Question ID bookmarked.",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student.",
+          "maxLength": 128
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Subject identifier (e.g. physics, english).",
+          "maxLength": 64
+        },
+        "subjectName": {
+          "type": "string",
+          "description": "Human-readable subject name.",
+          "maxLength": 100
+        },
+        "questionText": {
+          "type": "string",
+          "description": "Snippet or full text of the question.",
+          "maxLength": 2000
+        },
+        "savedAt": {
+          "type": "string",
+          "description": "Timestamp when bookmarked.",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "userId", "subjectId"]
+    },
+    "StudyGoalRecord": {
+      "title": "StudyGoalRecord",
+      "description": "Daily or weekly study goal progress record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Goal identifier or date key (YYYY-MM-DD).",
+          "maxLength": 64
+        },
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student.",
+          "maxLength": 128
+        },
+        "targetQuestions": {
+          "type": "number",
+          "description": "Target number of questions to answer."
+        },
+        "completedQuestions": {
+          "type": "number",
+          "description": "Questions answered today."
+        },
+        "targetMinutes": {
+          "type": "number",
+          "description": "Target study duration in minutes."
+        },
+        "completedMinutes": {
+          "type": "number",
+          "description": "Study duration spent in minutes."
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of goal (YYYY-MM-DD).",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp.",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "userId", "targetQuestions", "completedQuestions", "date"]
+    },
+    "ForumThread": {
+      "title": "ForumThread",
+      "description": "Discussion post or query created by a student or admin, categorized by subject and exam type.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the thread.",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "description": "Topic or discussion title.",
+          "maxLength": 200
+        },
+        "content": {
+          "type": "string",
+          "description": "Body content of the forum post.",
+          "maxLength": 5000
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the author.",
+          "maxLength": 128
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Name of the student or admin.",
+          "maxLength": 100
+        },
+        "authorEmail": {
+          "type": "string",
+          "description": "Email address of the author.",
+          "maxLength": 128
+        },
+        "authorRole": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "Privilege role of the author."
+        },
+        "examType": {
+          "type": "string",
+          "enum": ["ALL", "JAMB", "WAEC", "NECO", "POST_UTME", "GENERAL"],
+          "description": "Exam category of the discussion."
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Subject identifier if subject-specific (e.g. physics, mathematics).",
+          "maxLength": 64
+        },
+        "subjectName": {
+          "type": "string",
+          "description": "Human-readable subject name.",
+          "maxLength": 100
+        },
+        "views": {
+          "type": "number",
+          "description": "View impressions count."
+        },
+        "likes": {
+          "type": "number",
+          "description": "Upvote score count."
+        },
+        "replyCount": {
+          "type": "number",
+          "description": "Total number of student replies."
+        },
+        "isPinned": {
+          "type": "boolean",
+          "description": "Whether pinned to the top by an administrator."
+        },
+        "isLocked": {
+          "type": "boolean",
+          "description": "Whether thread is locked from further replies."
+        },
+        "isSolved": {
+          "type": "boolean",
+          "description": "Whether thread question has been resolved."
+        },
+        "solvedReplyId": {
+          "type": "string",
+          "description": "ID of the accepted best solution reply.",
+          "maxLength": 128
+        },
+        "moderationStatus": {
+          "type": "string",
+          "enum": ["approved", "flagged", "hidden"],
+          "description": "SabiGuard and Admin moderation status."
+        },
+        "moderationReason": {
+          "type": "string",
+          "description": "Moderator explanation note if flagged or moderated.",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO creation timestamp.",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO update timestamp.",
+          "maxLength": 50
+        },
+        "lastReplyAt": {
+          "type": "string",
+          "description": "ISO timestamp of most recent reply.",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "title", "content", "authorId", "authorName", "examType", "createdAt"]
+    },
+    "ForumReply": {
+      "title": "ForumReply",
+      "description": "A response or solution contributed to a forum discussion thread.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the reply.",
+          "maxLength": 128
+        },
+        "threadId": {
+          "type": "string",
+          "description": "ID of parent forum thread.",
+          "maxLength": 128
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the replier.",
+          "maxLength": 128
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Name of the student or admin.",
+          "maxLength": 100
+        },
+        "authorEmail": {
+          "type": "string",
+          "description": "Email address of the author.",
+          "maxLength": 128
+        },
+        "authorRole": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "Role of the replier."
+        },
+        "content": {
+          "type": "string",
+          "description": "Body text of the reply.",
+          "maxLength": 3000
+        },
+        "likes": {
+          "type": "number",
+          "description": "Upvote count for this answer."
+        },
+        "isAcceptedAnswer": {
+          "type": "boolean",
+          "description": "Whether selected as verified or best answer."
+        },
+        "isAdminResponse": {
+          "type": "boolean",
+          "description": "Whether posted by an administrator."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of reply submission.",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "threadId", "authorId", "authorName", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Stores individual user profile and preference records."
+    },
+    "/exam_results/{resultId}": {
+      "schema": "ExamResultRecord",
+      "description": "Stores completed CBT exam results with score analytics."
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": "UserBookmark",
+      "description": "Stores past questions bookmarked by a specific student."
+    },
+    "/users/{userId}/study_goals/{goalId}": {
+      "schema": "StudyGoalRecord",
+      "description": "Stores daily study goal progress for a student."
+    },
+    "/forum_threads/{threadId}": {
+      "schema": "ForumThread",
+      "description": "Stores community forum discussion posts categorized by exam and subject."
+    },
+    "/forum_threads/{threadId}/replies/{replyId}": {
+      "schema": "ForumReply",
+      "description": "Stores replies and comments on a specific forum discussion thread."
+    }
+  }
+}

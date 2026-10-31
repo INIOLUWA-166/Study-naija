@@ -13,6 +13,7 @@ import {
   AlertCircle, 
   ChevronRight, 
   ArrowRight, 
+  ArrowLeft,
   Sparkles, 
   ShieldCheck, 
   Vote, 
@@ -33,7 +34,9 @@ import {
   Volume2,
   VolumeX,
   BookOpen,
-  Calculator
+  Calculator,
+  Target,
+  Eye
 } from 'lucide-react';
 import { CBTCalculatorModal } from './CBTCalculatorModal';
 import { 
@@ -79,6 +82,24 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
   const [showAdminBattleModal, setShowAdminBattleModal] = useState(false);
   const [showAdminCutscene, setShowAdminCutscene] = useState(true);
   const [adminPreviewStudentLocked, setAdminPreviewStudentLocked] = useState(false);
+
+  // Focus Mode State: Isolated view of ONLY what the student tapped on (Match, Group, Prize, Scholar)
+  const [focusedDetail, setFocusedDetail] = useState<{
+    type: 'match' | 'group' | 'prize' | 'scholar';
+    data: any;
+  } | null>(null);
+  const [tapToFocusEnabled, setTapToFocusEnabled] = useState<boolean>(true);
+
+  // Keyboard shortcut: ESC exits focused item view
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && focusedDetail) {
+        setFocusedDetail(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focusedDetail]);
 
   const isAdmin = Boolean(
     user && (
@@ -423,6 +444,425 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
     }).catch(() => {});
   };
 
+  // =========================================================================
+  // ISOLATED FOCUS MODE: SHOW ONLY THE CONTEXT OF WHAT THE STUDENT TAPPED ON
+  // =========================================================================
+  if (focusedDetail) {
+    if (focusedDetail.type === 'match') {
+      const tieOrMatch = focusedDetail.data;
+      const p1 = tieOrMatch.player1 || tieOrMatch.leg1Match?.player1;
+      const p2 = tieOrMatch.player2 || tieOrMatch.leg1Match?.player2;
+      const roundLabel = tieOrMatch.round === 'final'
+        ? '👑 GRANDE FINALE CHAMPIONSHIP'
+        : tieOrMatch.round === 'third_place'
+        ? '🥉 3RD PLACE PLAYOFF'
+        : tieOrMatch.round === 'semis'
+        ? `🔥 SEMI-FINALS TIE #${tieOrMatch.tieIndex || 1}`
+        : tieOrMatch.round === 'quarters'
+        ? `⚡ QUARTER-FINALS TIE #${tieOrMatch.tieIndex || 1}`
+        : tieOrMatch.round === 'r16'
+        ? `🛡️ ROUND OF 16 TIE #${tieOrMatch.tieIndex || 1}`
+        : `MATCH #${tieOrMatch.matchNumber || 1} • GROUP ${tieOrMatch.groupId || 'STAGE'}`;
+
+      const p1Agg = tieOrMatch.aggregatePlayer1Score ?? tieOrMatch.player1Score ?? 0;
+      const p2Agg = tieOrMatch.aggregatePlayer2Score ?? tieOrMatch.player2Score ?? 0;
+      const isWinnerP1 = tieOrMatch.winnerId === p1?.id;
+      const isWinnerP2 = tieOrMatch.winnerId === p2?.id;
+      const matchToPlay = tieOrMatch.leg1Match || tieOrMatch;
+
+      return (
+        <div id="champions-match-isolated-focus" className="space-y-6 pb-20 max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-200">
+          {/* Top Control Bar */}
+          <div className="bg-slate-950 text-white rounded-3xl p-4 sm:p-5 border border-amber-400/40 shadow-2xl flex flex-wrap items-center justify-between gap-3 sticky top-20 z-30 backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setFocusedDetail(null)}
+                className="px-4 py-2 rounded-2xl bg-amber-400 text-slate-950 hover:bg-amber-300 font-black text-xs flex items-center gap-2 transition cursor-pointer shadow-md"
+                title="Return to full Champions League overview [ESC]"
+              >
+                <ArrowLeft className="w-4 h-4 stroke-[3]" />
+                <span>Back to Champions League</span>
+                <span className="text-[10px] opacity-75 font-mono hidden sm:inline">[ESC]</span>
+              </button>
+
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs font-mono font-bold text-slate-200">
+                  Focus Mode: <span className="text-amber-400">Match Details Only</span>
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setFocusedDetail(null)}
+              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Dedicated Match Card */}
+          <div className="bg-white rounded-3xl p-6 sm:p-10 border-2 border-amber-400 shadow-2xl space-y-8 relative overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-3 py-1 rounded-xl font-mono font-black text-xs bg-slate-950 text-amber-300">
+                  {roundLabel}
+                </span>
+                <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                  Subject: {matchToPlay.subjectId ? matchToPlay.subjectId.toUpperCase() : 'GENERAL CBT'}
+                </span>
+                <span className="px-3 py-1 rounded-xl text-xs font-bold bg-slate-100 text-slate-700">
+                  2 Legs Aggregate • Sudden Death if Tied
+                </span>
+              </div>
+
+              <div className="text-xs font-mono font-black text-slate-600">
+                {tieOrMatch.isCompleted ? (
+                  <span className="text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">Match Concluded</span>
+                ) : (
+                  <span className="text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg">Upcoming Fixture</span>
+                )}
+              </div>
+            </div>
+
+            {/* Contestants Faceoff Stage */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center relative">
+              {/* Center VS Indicator */}
+              <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-slate-950 text-amber-400 border-2 border-amber-400 items-center justify-center font-black text-xs shadow-xl z-10">
+                VS
+              </div>
+
+              {/* Player 1 Card */}
+              <div className={`p-6 rounded-3xl border-2 transition-all ${
+                isWinnerP1 ? 'bg-amber-50/60 border-amber-500 shadow-lg' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 font-black text-xl flex items-center justify-center shadow-md shrink-0">
+                    {p1?.name ? p1.name.slice(0, 2).toUpperCase() : 'P1'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-black text-lg text-slate-900 font-['Outfit']">{p1?.name || 'Candidate 1'}</h4>
+                      {isWinnerP1 && <span className="text-lg">👑</span>}
+                    </div>
+                    <p className="text-xs text-slate-500">Merit Seed #{p1?.id?.slice(0, 4) || '1'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-2 text-center pt-4 border-t border-slate-200/80">
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Leg 1</div>
+                    <div className="text-base font-black font-mono text-slate-800">{tieOrMatch.leg1Match?.player1Score ?? tieOrMatch.player1Score ?? '-'}</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Leg 2</div>
+                    <div className="text-base font-black font-mono text-slate-800">{tieOrMatch.leg2Match?.player1Score ?? '-'}</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-amber-100/60 border border-amber-300">
+                    <div className="text-[10px] uppercase font-black text-amber-900">Total Agg</div>
+                    <div className="text-base font-black font-mono text-amber-950">{p1Agg}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Player 2 Card */}
+              <div className={`p-6 rounded-3xl border-2 transition-all ${
+                isWinnerP2 ? 'bg-amber-50/60 border-amber-500 shadow-lg' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-400 text-slate-950 font-black text-xl flex items-center justify-center shadow-md shrink-0">
+                    {p2?.name ? p2.name.slice(0, 2).toUpperCase() : 'P2'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-black text-lg text-slate-900 font-['Outfit']">{p2?.name || 'Candidate 2'}</h4>
+                      {isWinnerP2 && <span className="text-lg">👑</span>}
+                    </div>
+                    <p className="text-xs text-slate-500">Merit Seed #{p2?.id?.slice(0, 4) || '2'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-2 text-center pt-4 border-t border-slate-200/80">
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Leg 1</div>
+                    <div className="text-base font-black font-mono text-slate-800">{tieOrMatch.leg1Match?.player2Score ?? tieOrMatch.player2Score ?? '-'}</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Leg 2</div>
+                    <div className="text-base font-black font-mono text-slate-800">{tieOrMatch.leg2Match?.player2Score ?? '-'}</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-cyan-100/60 border border-cyan-300">
+                    <div className="text-[10px] uppercase font-black text-cyan-900">Total Agg</div>
+                    <div className="text-base font-black font-mono text-cyan-950">{p2Agg}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Official Tournament Protocol & Rules */}
+            <div className="p-5 rounded-2xl bg-slate-900 text-white space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-mono font-bold text-amber-400 uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>Academic Champions League Official Match Rules</span>
+              </div>
+              <ul className="space-y-1 text-slate-300 list-disc pl-4 leading-relaxed">
+                <li>Two-legged aggregate scoring ensures fair play and test reliability.</li>
+                <li>1-Minute resting interval between legs with automated countdown.</li>
+                <li>Sudden-death 5 questions protocol activated immediately if aggregate score ends level.</li>
+                <li>Admin Sentinel anti-cheat monitor active: browser tab switches and speed hacks result in automatic forfeit.</li>
+              </ul>
+            </div>
+
+            {/* Match Actions */}
+            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <button
+                onClick={() => setFocusedDetail(null)}
+                className="text-xs font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Exit Match Focus View</span>
+              </button>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  onClick={() => {
+                    handleQuickSimulateMatch(matchToPlay.id);
+                    setFocusedDetail(null);
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                >
+                  ⚡ Simulate Match with AI
+                </button>
+                <button
+                  onClick={() => {
+                    handleStartMatch(matchToPlay, tieOrMatch.round === 'final');
+                    setFocusedDetail(null);
+                  }}
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-black text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  <span>Play Match Live in Arena</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (focusedDetail.type === 'group') {
+      const grp = focusedDetail.data;
+      return (
+        <div id="champions-group-isolated-focus" className="space-y-6 pb-20 max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-200">
+          {/* Top Control Bar */}
+          <div className="bg-slate-950 text-white rounded-3xl p-4 sm:p-5 border border-cyan-500/40 shadow-2xl flex flex-wrap items-center justify-between gap-3 sticky top-20 z-30 backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setFocusedDetail(null)}
+                className="px-4 py-2 rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300 font-black text-xs flex items-center gap-2 transition cursor-pointer shadow-md"
+              >
+                <ArrowLeft className="w-4 h-4 stroke-[3]" />
+                <span>Back to Champions League</span>
+                <span className="text-[10px] opacity-75 font-mono hidden sm:inline">[ESC]</span>
+              </button>
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-xs font-mono font-bold text-slate-200">
+                  Focus: <span className="text-cyan-400 font-black">Group {grp.id} Details</span>
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setFocusedDetail(null)}
+              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-cyan-400 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-black text-xl text-slate-900 font-['Outfit'] flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-cyan-100 text-cyan-900 flex items-center justify-center font-black text-sm">
+                  {grp.id}
+                </span>
+                <span>Group {grp.id}: {grp.name} Table & Matches</span>
+              </h3>
+              <span className="text-xs text-emerald-800 font-bold bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
+                Top 2 Qualify for Round of 16
+              </span>
+            </div>
+
+            {/* Standings Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-mono uppercase text-[10px]">
+                    <th className="py-2.5 px-3">Pos</th>
+                    <th className="py-2.5 px-3">Candidate</th>
+                    <th className="py-2.5 px-2 text-center">P</th>
+                    <th className="py-2.5 px-2 text-center">W</th>
+                    <th className="py-2.5 px-2 text-center">L</th>
+                    <th className="py-2.5 px-2 text-center">Correct Qs</th>
+                    <th className="py-2.5 px-3 text-right">Pts</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {grp.standings.map((s: any, idx: number) => (
+                    <tr key={s.participantId} className={idx < 2 ? 'bg-emerald-50/50 font-bold' : ''}>
+                      <td className="py-3 px-3 font-mono font-bold">
+                        {idx < 2 ? (
+                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px]">
+                            {idx + 1}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 pl-1.5">{idx + 1}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="font-extrabold text-slate-900 flex items-center gap-2">
+                          <span>{s.participantName}</span>
+                          {idx < 2 && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 font-mono font-black">
+                              QUALIFIED
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-2 text-center font-mono">{s.played}</td>
+                      <td className="py-3 px-2 text-center font-mono text-emerald-700">{s.won}</td>
+                      <td className="py-3 px-2 text-center font-mono text-slate-400">{s.lost}</td>
+                      <td className="py-3 px-2 text-center font-mono">{s.correctAnswers}</td>
+                      <td className="py-3 px-3 text-right font-mono font-black text-sm text-slate-900">
+                        {s.points}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Fixtures list */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <h4 className="font-extrabold text-sm text-slate-800">Group {grp.id} Head-to-Head Fixtures (6 Matches)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {grp.matches.map((m: any) => (
+                  <div key={m.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                      <span>Match #{m.matchNumber} • {m.subjectId.toUpperCase()}</span>
+                      <span className="text-emerald-700 font-bold">{m.isCompleted ? 'FT' : 'Pending'}</span>
+                    </div>
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="truncate max-w-[120px]">{m.player1.name}</span>
+                      <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {m.player1Score} - {m.player2Score}
+                      </span>
+                      <span className="truncate max-w-[120px] text-right">{m.player2.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          setFocusedDetail({ type: 'match', data: m });
+                        }}
+                        className="flex-1 py-1 text-[11px] font-bold rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 cursor-pointer text-center"
+                      >
+                        Inspect Match
+                      </button>
+                      <button
+                        onClick={() => handleStartMatch(m)}
+                        className="flex-1 py-1 text-[11px] font-black rounded-lg bg-blue-600 hover:bg-blue-700 text-white cursor-pointer text-center shadow-xs"
+                      >
+                        Play Now →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+              <button
+                onClick={() => setFocusedDetail(null)}
+                className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Exit Group Focus View</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleSimulateGroup(grp.id);
+                  setFocusedDetail(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+              >
+                Simulate Entire Group {grp.id}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (focusedDetail.type === 'prize') {
+      const prize = focusedDetail.data;
+      return (
+        <div id="champions-prize-isolated-focus" className="space-y-6 pb-20 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-slate-950 text-white rounded-3xl p-4 sm:p-5 border border-amber-400/40 shadow-2xl flex items-center justify-between gap-3 sticky top-20 z-30">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setFocusedDetail(null)}
+                className="px-4 py-2 rounded-2xl bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-2 cursor-pointer shadow-md"
+              >
+                <ArrowLeft className="w-4 h-4 stroke-[3]" />
+                <span>Back to Champions League</span>
+              </button>
+              <span className="text-xs font-mono font-bold text-slate-200">
+                Prize Details: <span className="text-amber-400">{prize.title || 'Official Cash Reward'}</span>
+              </span>
+            </div>
+            <button onClick={() => setFocusedDetail(null)} className="p-2 text-slate-300 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 sm:p-10 border-2 border-amber-400 shadow-2xl space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-3xl shadow-lg shrink-0">
+                {prize.icon || '🏆'}
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                  {prize.badge || 'GUARANTEED REWARD'}
+                </span>
+                <h3 className="text-2xl font-black text-slate-900 font-['Outfit'] mt-1">{prize.title}</h3>
+                <p className="text-xs text-slate-600">{prize.desc || 'Automated airtime/cash transfer via OPay + VIP membership.'}</p>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="text-sm font-extrabold text-slate-900">How Champions Claim Cash Transfers:</div>
+              <ol className="list-decimal pl-5 space-y-2 text-xs text-slate-700 leading-relaxed">
+                <li>Submit your 10-digit Nigerian NUBAN account number and beneficiary name.</li>
+                <li>The Admin Sentinel AI validates the match integrity and confirms no speed hacks were used.</li>
+                <li>Cash rewards are disbursed directly to your bank account with instant SMS credit notification.</li>
+                <li>Free VIP membership honors (Gold, Diamond, Platinum) are activated immediately on your StudyNaija profile.</li>
+              </ol>
+            </div>
+
+            <button
+              onClick={() => setFocusedDetail(null)}
+              className="w-full py-3 rounded-2xl bg-slate-950 hover:bg-slate-900 text-amber-300 font-black text-xs cursor-pointer shadow-md"
+            >
+              ← Return to Champions League
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div id="champions-league-tournament" className="space-y-8 pb-20">
       
@@ -436,12 +876,18 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
 
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-400/40">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span>StudyNaija Monthly Champions League</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
-                OFFICIAL CUP
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-400/40">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>StudyNaija Monthly Champions League</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
+                  OFFICIAL CUP
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Tap-to-Focus Mode: Active (Tap any item to isolate)</span>
+              </div>
             </div>
 
             <h1 className="text-3xl sm:text-5xl font-black font-['Outfit'] tracking-tight">
@@ -470,33 +916,96 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
             </div>
           </div>
 
-          {/* Quick Prize Highlights Card */}
+          {/* Quick Prize Highlights Card - Tap any to isolate */}
           <div className="bg-slate-900/90 rounded-2xl p-5 border border-amber-400/30 shadow-xl space-y-3 shrink-0 w-full md:w-80">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <span className="text-xs font-bold text-slate-400">Monthly Tournament Prizes</span>
-              <span className="text-[10px] font-mono text-amber-400 font-bold">Auto-Activated by AI</span>
+              <span className="text-[10px] font-mono text-amber-400 font-bold">Tap to Isolate</span>
             </div>
 
             <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-400/30">
+              <div 
+                onClick={() => setFocusedDetail({
+                  type: 'prize',
+                  data: {
+                    rankTitle: '1st Place Gold Champion',
+                    title: '1st Place: ₦5,000 + Gold Theme',
+                    icon: '🥇',
+                    badge: 'CHAMPIONS LEAGUE 1ST PRIZE',
+                    desc: '₦5,000 cash transfer via OPay/Bank + 1-Month Free Premium membership with exclusive Gold Crown profile badge.',
+                    rules: [
+                      'Automatic instant transfer upon winning the 4-subject Grand Finale.',
+                      'Special animated Golden Crown aura in all Study Naija leaderboards.',
+                      'Free VIP access to all JAMB & WAEC CBT mock simulation archives.'
+                    ]
+                  }
+                })}
+                className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-400/30 hover:border-amber-400 hover:bg-amber-500/20 cursor-pointer transition-all group"
+                title="Tap to isolate 1st Place details"
+              >
                 <span className="font-bold text-amber-300 flex items-center gap-1.5">
                   <span>🥇 1st Place:</span>
                 </span>
-                <span className="font-black text-white">₦5,000 + Gold Theme</span>
+                <span className="font-black text-white group-hover:text-amber-200 flex items-center gap-1">
+                  <span>₦5,000 + Gold Theme</span>
+                  <span className="text-[10px] opacity-70">🔍</span>
+                </span>
               </div>
 
-              <div className="flex items-center justify-between p-2 rounded-xl bg-cyan-500/10 border border-cyan-400/30">
+              <div 
+                onClick={() => setFocusedDetail({
+                  type: 'prize',
+                  data: {
+                    rankTitle: '2nd Place Diamond Runner-Up',
+                    title: '2nd Place: ₦3,000 + Diamond Theme',
+                    icon: '🥈',
+                    badge: 'CHAMPIONS LEAGUE 2ND PRIZE',
+                    desc: '₦3,000 cash transfer via OPay/Bank + 1-Month Free Medium membership with exclusive Diamond profile badge.',
+                    rules: [
+                      'Awarded to the Grande Finale runner-up.',
+                      'Special Diamond aura across student profile & community chat.',
+                      'Full access to all subject syllabus breakdowns & speed drills.'
+                    ]
+                  }
+                })}
+                className="flex items-center justify-between p-2 rounded-xl bg-cyan-500/10 border border-cyan-400/30 hover:border-cyan-400 hover:bg-cyan-500/20 cursor-pointer transition-all group"
+                title="Tap to isolate 2nd Place details"
+              >
                 <span className="font-bold text-cyan-300 flex items-center gap-1.5">
                   <span>🥈 2nd Place:</span>
                 </span>
-                <span className="font-black text-white">₦3,000 + Diamond Theme</span>
+                <span className="font-black text-white group-hover:text-cyan-200 flex items-center gap-1">
+                  <span>₦3,000 + Diamond Theme</span>
+                  <span className="text-[10px] opacity-70">🔍</span>
+                </span>
               </div>
 
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-300/10 border border-slate-300/30">
+              <div 
+                onClick={() => setFocusedDetail({
+                  type: 'prize',
+                  data: {
+                    rankTitle: '3rd Place Platinum Scholar',
+                    title: '3rd Place: ₦1,500 + Platinum Theme',
+                    icon: '🥉',
+                    badge: 'CHAMPIONS LEAGUE 3RD PRIZE',
+                    desc: '₦1,500 cash transfer via OPay/Bank + 1-Month Free Basic membership with exclusive Platinum badge.',
+                    rules: [
+                      'Awarded to the winner of the 3rd place playoff match.',
+                      'Special Platinum star icon on leaderboard.',
+                      'Full access to practice CBT mode and leaderboard drills.'
+                    ]
+                  }
+                })}
+                className="flex items-center justify-between p-2 rounded-xl bg-slate-300/10 border border-slate-300/30 hover:border-slate-300 hover:bg-slate-300/20 cursor-pointer transition-all group"
+                title="Tap to isolate 3rd Place details"
+              >
                 <span className="font-bold text-slate-300 flex items-center gap-1.5">
                   <span>🥉 3rd Place:</span>
                 </span>
-                <span className="font-black text-white">₦1,500 + Platinum Theme</span>
+                <span className="font-black text-white group-hover:text-slate-100 flex items-center gap-1">
+                  <span>₦1,500 + Platinum Theme</span>
+                  <span className="text-[10px] opacity-70">🔍</span>
+                </span>
               </div>
             </div>
           </div>
@@ -1024,10 +1533,18 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
               </div>
 
               {tournament.r16Ties.map((tie) => (
-                <div key={tie.id} className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-slate-300 transition-colors">
+                <div 
+                  key={tie.id} 
+                  onClick={() => setFocusedDetail({ type: 'match', data: tie })}
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-amber-400 hover:shadow-md transition-all cursor-pointer group"
+                  title="Click to isolate only this Round of 16 match"
+                >
                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                    <span>Tie #{tie.tieIndex}</span>
-                    <span className="text-emerald-600 font-bold">2 Legs Agg</span>
+                    <span className="font-bold text-slate-600">Tie #{tie.tieIndex}</span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded group-hover:bg-amber-100 flex items-center gap-1">
+                      <span>Isolate</span>
+                      <span>🔍</span>
+                    </span>
                   </div>
 
                   <div className="space-y-1">
@@ -1050,14 +1567,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                   {!tie.isCompleted && (
                     <div className="flex items-center gap-1.5 pt-1">
                       <button
-                        onClick={() => handleStartMatch(tie.leg1Match)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartMatch(tie.leg1Match);
+                        }}
                         className="flex-1 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors cursor-pointer text-center flex items-center justify-center gap-1 shadow-sm"
                       >
                         <Play className="w-3.5 h-3.5" />
                         <span>Play Match →</span>
                       </button>
                       <button
-                        onClick={() => handleQuickSimulateMatch(tie.leg1Match.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickSimulateMatch(tie.leg1Match.id);
+                        }}
                         disabled={simulatingMatchId === tie.leg1Match.id}
                         className="px-2 py-1.5 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                         title="Simulate with AI"
@@ -1078,10 +1601,18 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
               </div>
 
               {tournament.quarterTies.map((tie) => (
-                <div key={tie.id} className="p-3.5 rounded-2xl bg-white border border-purple-200 shadow-xs space-y-2">
+                <div 
+                  key={tie.id} 
+                  onClick={() => setFocusedDetail({ type: 'match', data: tie })}
+                  className="p-3.5 rounded-2xl bg-white border border-purple-200 shadow-xs space-y-2 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer group"
+                  title="Click to isolate only this Quarter Final match"
+                >
                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                    <span>QF #{tie.tieIndex}</span>
-                    <span className="text-purple-600 font-bold">2 Legs</span>
+                    <span className="font-bold text-purple-700">QF #{tie.tieIndex}</span>
+                    <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded group-hover:bg-purple-100 flex items-center gap-1">
+                      <span>Isolate</span>
+                      <span>🔍</span>
+                    </span>
                   </div>
 
                   <div className="space-y-1">
@@ -1104,14 +1635,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                   {!tie.isCompleted && (
                     <div className="flex items-center gap-1.5 pt-1">
                       <button
-                        onClick={() => handleStartMatch(tie.leg1Match)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartMatch(tie.leg1Match);
+                        }}
                         className="flex-1 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors cursor-pointer text-center flex items-center justify-center gap-1 shadow-sm"
                       >
                         <Play className="w-3.5 h-3.5" />
                         <span>Play Match →</span>
                       </button>
                       <button
-                        onClick={() => handleQuickSimulateMatch(tie.leg1Match.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickSimulateMatch(tie.leg1Match.id);
+                        }}
                         disabled={simulatingMatchId === tie.leg1Match.id}
                         className="px-2 py-1.5 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                         title="Simulate with AI"
@@ -1132,10 +1669,18 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
               </div>
 
               {tournament.semiTies.map((tie) => (
-                <div key={tie.id} className="p-3.5 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-2">
+                <div 
+                  key={tie.id} 
+                  onClick={() => setFocusedDetail({ type: 'match', data: tie })}
+                  className="p-3.5 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-2 hover:border-rose-400 hover:shadow-md transition-all cursor-pointer group"
+                  title="Click to isolate only this Semi Final match"
+                >
                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                    <span>SF #{tie.tieIndex}</span>
-                    <span className="text-rose-600 font-bold">2 Legs</span>
+                    <span className="font-bold text-rose-700">SF #{tie.tieIndex}</span>
+                    <span className="text-[10px] text-rose-700 font-bold bg-rose-50 px-1.5 py-0.5 rounded group-hover:bg-rose-100 flex items-center gap-1">
+                      <span>Isolate</span>
+                      <span>🔍</span>
+                    </span>
                   </div>
 
                   <div className="space-y-1">
@@ -1158,14 +1703,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                   {!tie.isCompleted && (
                     <div className="flex items-center gap-1.5 pt-1">
                       <button
-                        onClick={() => handleStartMatch(tie.leg1Match)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartMatch(tie.leg1Match);
+                        }}
                         className="flex-1 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors cursor-pointer text-center flex items-center justify-center gap-1 shadow-sm"
                       >
                         <Play className="w-3.5 h-3.5" />
                         <span>Play Match →</span>
                       </button>
                       <button
-                        onClick={() => handleQuickSimulateMatch(tie.leg1Match.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickSimulateMatch(tie.leg1Match.id);
+                        }}
                         disabled={simulatingMatchId === tie.leg1Match.id}
                         className="px-2 py-1.5 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                         title="Simulate with AI"
@@ -1186,10 +1737,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
               </div>
 
               {tournament.finalTie && (
-                <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-white border-2 border-amber-400 shadow-md space-y-2.5">
+                <div 
+                  onClick={() => setFocusedDetail({ type: 'match', data: tournament.finalTie })}
+                  className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-white border-2 border-amber-400 shadow-md space-y-2.5 hover:shadow-xl hover:border-amber-500 transition-all cursor-pointer group"
+                  title="Click to isolate the Grande Finale Championship match"
+                >
                   <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
-                    <span>👑 Championship Match</span>
-                    <span className="text-amber-700">40 Qs Total</span>
+                    <span className="flex items-center gap-1">
+                      <span>👑 Championship Match</span>
+                      <span className="text-[10px] bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded font-mono">40 Qs</span>
+                    </span>
+                    <span className="text-[10px] text-amber-800 font-black bg-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>Isolate Match</span>
+                      <span>🔍</span>
+                    </span>
                   </div>
 
                   <div className="space-y-1.5">
@@ -1208,14 +1769,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                   {!tournament.finalTie.isCompleted && (
                     <div className="flex items-center gap-1.5 pt-1">
                       <button
-                        onClick={() => handleStartMatch(tournament.finalTie!.leg1Match, true)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartMatch(tournament.finalTie!.leg1Match, true);
+                        }}
                         className="flex-1 py-2 text-xs font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
                       >
                         <Trophy className="w-3.5 h-3.5" />
                         <span>Play 4-Subject Finale</span>
                       </button>
                       <button
-                        onClick={() => handleQuickSimulateMatch(tournament.finalTie!.leg1Match.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickSimulateMatch(tournament.finalTie!.leg1Match.id);
+                        }}
                         disabled={simulatingMatchId === tournament.finalTie!.leg1Match.id}
                         className="px-2.5 py-2 text-[10px] font-bold text-slate-700 bg-amber-100 hover:bg-amber-200 rounded-xl transition-all cursor-pointer"
                         title="Simulate Finale"
@@ -1229,10 +1796,17 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
 
               {/* 3rd Place Playoff Card */}
               {tournament.thirdPlaceTie && (
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-300 space-y-2">
+                <div 
+                  onClick={() => setFocusedDetail({ type: 'match', data: tournament.thirdPlaceTie })}
+                  className="p-3.5 rounded-2xl bg-slate-50 border border-slate-300 space-y-2 hover:border-slate-500 hover:shadow-md transition-all cursor-pointer group"
+                  title="Click to isolate 3rd place playoff match"
+                >
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
                     <span>🥉 3rd Place Play-Off</span>
-                    <span className="text-slate-500">2 Legs</span>
+                    <span className="text-[10px] text-slate-600 font-mono bg-slate-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span>Isolate</span>
+                      <span>🔍</span>
+                    </span>
                   </div>
 
                   <div className="space-y-1">
@@ -1250,14 +1824,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                   {!tournament.thirdPlaceTie.isCompleted && (
                     <div className="flex items-center gap-1.5 pt-1">
                       <button
-                        onClick={() => handleStartMatch(tournament.thirdPlaceTie!.leg1Match)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartMatch(tournament.thirdPlaceTie!.leg1Match);
+                        }}
                         className="flex-1 py-1.5 text-[11px] font-bold text-slate-800 bg-slate-200 hover:bg-slate-300 rounded-lg cursor-pointer text-center flex items-center justify-center gap-1"
                       >
                         <Play className="w-3 h-3" />
                         <span>Play 3rd Place Match</span>
                       </button>
                       <button
-                        onClick={() => handleQuickSimulateMatch(tournament.thirdPlaceTie!.leg1Match.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickSimulateMatch(tournament.thirdPlaceTie!.leg1Match.id);
+                        }}
                         disabled={simulatingMatchId === tournament.thirdPlaceTie!.leg1Match.id}
                         className="px-2 py-1.5 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                       >
@@ -1315,16 +1895,26 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                 
                 {/* Standings Table (2 Columns on large screens) */}
                 <div className="lg:col-span-2 bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
                     <h3 className="font-black text-base text-slate-900 font-['Outfit'] flex items-center gap-2">
                       <span className="w-6 h-6 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-xs">
                         {grp.id}
                       </span>
                       <span>{grp.name} Standings</span>
                     </h3>
-                    <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      Top 2 Advance to R16
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setFocusedDetail({ type: 'group', data: grp })}
+                        className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        title="Isolate only Group data and fixtures"
+                      >
+                        <span>Isolate Group {grp.id} Details</span>
+                        <span>🔍</span>
+                      </button>
+                      <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                        Top 2 Advance to R16
+                      </span>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -1392,10 +1982,18 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
 
                   <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                     {grp.matches.map((m) => (
-                      <div key={m.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
+                      <div 
+                        key={m.id} 
+                        onClick={() => setFocusedDetail({ type: 'match', data: m })}
+                        className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs hover:border-amber-400 hover:shadow-md transition-all cursor-pointer group"
+                        title="Click to isolate only this match"
+                      >
                         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                          <span>Match #{m.matchNumber} • {m.subjectId.toUpperCase()}</span>
-                          <span className="text-emerald-700 font-bold">FT</span>
+                          <span className="font-bold text-slate-600">Match #{m.matchNumber} • {m.subjectId.toUpperCase()}</span>
+                          <span className="text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded group-hover:bg-amber-100 flex items-center gap-1">
+                            <span>Isolate</span>
+                            <span>🔍</span>
+                          </span>
                         </div>
 
                         <div className="flex items-center justify-between">
@@ -1414,14 +2012,20 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                         {!m.isCompleted && (
                           <div className="flex items-center gap-1.5 pt-1">
                             <button
-                              onClick={() => handleStartMatch(m)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartMatch(m);
+                              }}
                               className="flex-1 py-1 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg cursor-pointer transition-colors text-center shadow-xs flex items-center justify-center gap-1"
                             >
                               <Play className="w-3 h-3" />
                               <span>Play 1v1 Match</span>
                             </button>
                             <button
-                              onClick={() => handleQuickSimulateMatch(m.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuickSimulateMatch(m.id);
+                              }}
                               disabled={simulatingMatchId === m.id}
                               className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                               title="Simulate with AI"
@@ -1790,11 +2394,30 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             
             {/* 1st Place Card */}
-            <div className="rounded-3xl p-6 bg-gradient-to-b from-amber-500/20 via-amber-500/10 to-transparent border-2 border-amber-400 space-y-3 relative overflow-hidden shadow-md">
+            <div 
+              onClick={() => setFocusedDetail({
+                type: 'prize',
+                data: {
+                  rankTitle: '1st Place Gold Champion',
+                  title: '1st Place: ₦5,000 + Gold Theme',
+                  icon: '🥇',
+                  badge: 'CHAMPIONS LEAGUE 1ST PRIZE',
+                  desc: '₦5,000 cash transfer via OPay/Bank + 1-Month Free Premium membership with exclusive Gold Crown profile badge.',
+                  rules: [
+                    'Automatic instant transfer upon winning the 4-subject Grand Finale.',
+                    'Special animated Golden Crown aura in all Study Naija leaderboards.',
+                    'Free VIP access to all JAMB & WAEC CBT mock simulation archives.'
+                  ]
+                }
+              })}
+              className="rounded-3xl p-6 bg-gradient-to-b from-amber-500/20 via-amber-500/10 to-transparent border-2 border-amber-400 space-y-3 relative overflow-hidden shadow-md cursor-pointer hover:border-amber-500 hover:shadow-xl transition-all group"
+              title="Click to isolate 1st Place details"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-4xl">🥇</span>
-                <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-xs">
-                  1st Place Champion
+                <span className="text-4xl group-hover:scale-110 transition-transform">🥇</span>
+                <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1">
+                  <span>1st Place Champion</span>
+                  <span className="text-[10px]">🔍</span>
                 </span>
               </div>
               <h3 className="font-black text-2xl text-slate-950 font-['Outfit']">
@@ -1805,14 +2428,37 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                 <div>👑 <strong>Special "1st" Badge</strong> displayed in candidate name & community chat</div>
                 <div>🌟 <strong>Full Website Turns GOLD</strong> for the winner for 30 days</div>
               </div>
+              <div className="pt-2 text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                <span>Tap to isolate full prize rules</span>
+                <span>→</span>
+              </div>
             </div>
 
             {/* 2nd Place Card */}
-            <div className="rounded-3xl p-6 bg-gradient-to-b from-cyan-500/20 via-cyan-500/10 to-transparent border-2 border-cyan-400 space-y-3 relative overflow-hidden shadow-md">
+            <div 
+              onClick={() => setFocusedDetail({
+                type: 'prize',
+                data: {
+                  rankTitle: '2nd Place Diamond Runner-Up',
+                  title: '2nd Place: ₦3,000 + Diamond Theme',
+                  icon: '🥈',
+                  badge: 'CHAMPIONS LEAGUE 2ND PRIZE',
+                  desc: '₦3,000 cash transfer via OPay/Bank + 1-Month Free Medium membership with exclusive Diamond profile badge.',
+                  rules: [
+                    'Awarded to the Grande Finale runner-up.',
+                    'Special Diamond aura across student profile & community chat.',
+                    'Full access to all subject syllabus breakdowns & speed drills.'
+                  ]
+                }
+              })}
+              className="rounded-3xl p-6 bg-gradient-to-b from-cyan-500/20 via-cyan-500/10 to-transparent border-2 border-cyan-400 space-y-3 relative overflow-hidden shadow-md cursor-pointer hover:border-cyan-500 hover:shadow-xl transition-all group"
+              title="Click to isolate 2nd Place details"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-4xl">🥈</span>
-                <span className="px-3 py-1 rounded-full bg-cyan-400 text-slate-950 font-black text-xs">
-                  2nd Place Runner-Up
+                <span className="text-4xl group-hover:scale-110 transition-transform">🥈</span>
+                <span className="px-3 py-1 rounded-full bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1">
+                  <span>2nd Place Runner-Up</span>
+                  <span className="text-[10px]">🔍</span>
                 </span>
               </div>
               <h3 className="font-black text-2xl text-slate-950 font-['Outfit']">
@@ -1823,14 +2469,37 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                 <div>💎 <strong>Special "2nd" Badge</strong> displayed in name & community chat</div>
                 <div>🔷 <strong>Full Website Turns DIAMOND</strong> for the winner for 30 days</div>
               </div>
+              <div className="pt-2 text-[11px] font-bold text-cyan-900 flex items-center gap-1">
+                <span>Tap to isolate full prize rules</span>
+                <span>→</span>
+              </div>
             </div>
 
             {/* 3rd Place Card */}
-            <div className="rounded-3xl p-6 bg-gradient-to-b from-slate-400/20 via-slate-400/10 to-transparent border-2 border-slate-400 space-y-3 relative overflow-hidden shadow-md">
+            <div 
+              onClick={() => setFocusedDetail({
+                type: 'prize',
+                data: {
+                  rankTitle: '3rd Place Platinum Scholar',
+                  title: '3rd Place: ₦1,500 + Platinum Theme',
+                  icon: '🥉',
+                  badge: 'CHAMPIONS LEAGUE 3RD PRIZE',
+                  desc: '₦1,500 cash transfer via OPay/Bank + 1-Month Free Basic membership with exclusive Platinum badge.',
+                  rules: [
+                    'Awarded to the winner of the 3rd place playoff match.',
+                    'Special Platinum star icon on leaderboard.',
+                    'Full access to practice CBT mode and leaderboard drills.'
+                  ]
+                }
+              })}
+              className="rounded-3xl p-6 bg-gradient-to-b from-slate-400/20 via-slate-400/10 to-transparent border-2 border-slate-400 space-y-3 relative overflow-hidden shadow-md cursor-pointer hover:border-slate-500 hover:shadow-xl transition-all group"
+              title="Click to isolate 3rd Place details"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-4xl">🥉</span>
-                <span className="px-3 py-1 rounded-full bg-slate-300 text-slate-950 font-black text-xs">
-                  3rd Place Scholar
+                <span className="text-4xl group-hover:scale-110 transition-transform">🥉</span>
+                <span className="px-3 py-1 rounded-full bg-slate-300 text-slate-950 font-black text-xs flex items-center gap-1">
+                  <span>3rd Place Scholar</span>
+                  <span className="text-[10px]">🔍</span>
                 </span>
               </div>
               <h3 className="font-black text-2xl text-slate-950 font-['Outfit']">
@@ -1840,6 +2509,10 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
                 <div>✨ <strong>1-Month Free Basic Membership</strong> (Auto-activated by Admin AI)</div>
                 <div>🎖️ <strong>Special "3rd" Badge</strong> displayed in name & community chat</div>
                 <div>💿 <strong>Full Website Turns PLATINUM</strong> for the winner for 30 days</div>
+              </div>
+              <div className="pt-2 text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                <span>Tap to isolate full prize rules</span>
+                <span>→</span>
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-export type ExamType = 'JAMB' | 'WAEC' | 'ALL' | 'COMMON_ENTRANCE' | 'UNIVERSITY_GST';
+export type ExamType = 'JAMB' | 'WAEC' | 'NECO' | 'ALL' | 'COMMON_ENTRANCE' | 'UNIVERSITY_GST';
 
 export type EducationLevel = 'primary' | 'secondary' | 'university';
 
@@ -10,6 +10,38 @@ export type SubjectId =
   | 'physics'
   | 'economics'
   | 'government'
+  | 'literature'
+  | 'crs'
+  | 'irs'
+  | 'civic'
+  | 'history'
+  | 'commerce'
+  | 'accounting'
+  | 'marketing'
+  | 'agricultural-science'
+  | 'further-maths'
+  | 'computer-studies'
+  | 'geography'
+  // Real-Life (IRL) Art & Humanities
+  | 'yoruba'
+  | 'igbo'
+  | 'hausa'
+  | 'french'
+  | 'visual-art'
+  | 'music'
+  // Real-Life (IRL) Commercial & Business
+  | 'insurance'
+  | 'office-practice'
+  | 'store-management'
+  | 'bookkeeping'
+  | 'data-processing'
+  // Real-Life (IRL) Science & Technical
+  | 'technical-drawing'
+  | 'food-and-nutrition'
+  | 'animal-husbandry'
+  | 'basic-electricity'
+  | 'fisheries'
+  | 'health-education'
   | 'primary-math'
   | 'primary-english'
   | 'primary-science'
@@ -56,6 +88,7 @@ export interface Subject {
   code: string;
   icon: string;
   educationLevel?: EducationLevel;
+  department?: 'science' | 'art' | 'commercial' | 'general';
   description: string;
   topics: string[];
   questionCount: number;
@@ -106,7 +139,7 @@ export interface User {
   state?: string;
   role: 'student' | 'admin';
   educationLevel: EducationLevel; // 'primary' | 'secondary' | 'university'
-  targetExam: 'JAMB' | 'WAEC' | 'BOTH' | 'COMMON_ENTRANCE' | 'UNIVERSITY_GST';
+  targetExam: 'JAMB' | 'WAEC' | 'NECO' | 'BOTH' | 'COMMON_ENTRANCE' | 'UNIVERSITY_GST';
   targetCourse?: string;
   premiumPlan: 'free' | 'basic' | 'medium' | 'premium';
   premiumExpiresAt?: string | null;
@@ -115,6 +148,7 @@ export interface User {
   aiTutorQueriesUsed?: number;
   aiTutorLastUsedDate?: string;
   xp?: number;
+  storyReaderPoints?: number; // Literary comprehension points (strictly excluded from competitive CBT leaderboard)
   streakDays?: number;
   lastActiveDate?: string;
   flashChallengeBestScore?: number;
@@ -161,6 +195,8 @@ export interface User {
   suspensionOffenseLevel?: 'minor' | 'major' | 'critical';
   securityStrikes?: number;
   securityFlagHistory?: { offense: string; date: string; action: string; severity: string }[];
+  pledgeSigned?: boolean;
+  honorSealActive?: boolean;
 }
 
 export type OffenseType =
@@ -169,7 +205,11 @@ export type OffenseType =
   | 'score_tampering'
   | 'payload_injection'
   | 'payment_fraud'
-  | 'proctoring_violation';
+  | 'proctoring_violation'
+  | 'streak_automation'
+  | 'match_abandonment'
+  | 'collusion'
+  | 'community_harassment';
 
 export interface SecurityIncident {
   id: string;
@@ -526,6 +566,55 @@ export interface ModerationResult {
   reason?: string;
   cleanAdvice?: string;
   educationalFeedback?: string;
+}
+
+export type ForumExamCategory = 'ALL' | 'JAMB' | 'WAEC' | 'NECO' | 'POST_UTME' | 'GENERAL';
+
+export interface ForumReply {
+  id: string;
+  threadId: string;
+  authorId: string;
+  authorName: string;
+  authorEmail?: string;
+  authorRole?: 'student' | 'admin';
+  authorTournamentBadge?: '1st' | '2nd' | '3rd' | null;
+  authorThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
+  content: string;
+  createdAt: string;
+  likes: number;
+  likedBy: string[];
+  isAcceptedAnswer?: boolean;
+  isAdminResponse?: boolean;
+}
+
+export interface ForumThread {
+  id: string;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorEmail?: string;
+  authorRole?: 'student' | 'admin';
+  authorTournamentBadge?: '1st' | '2nd' | '3rd' | null;
+  authorThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
+  examType: ForumExamCategory;
+  subjectId?: string;
+  subjectName?: string;
+  tags: string[];
+  views: number;
+  likes: number;
+  likedBy: string[];
+  replyCount: number;
+  isPinned: boolean;
+  isLocked: boolean;
+  isSolved: boolean;
+  solvedReplyId?: string;
+  moderationStatus: 'approved' | 'flagged' | 'hidden';
+  moderationReason?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastReplyAt?: string;
+  replies?: ForumReply[];
 }
 
 export interface PredictedScoreData {

@@ -19,10 +19,12 @@ import {
   Filter,
   Eye,
   Lock,
-  Cpu
+  Cpu,
+  Scale
 } from 'lucide-react';
 import { SecurityIncident, OffenseType, User } from '../types';
 import { api } from '../services/api';
+import { ScholarHonorCodeModal } from './ScholarHonorCodeModal';
 
 interface AdminSentinelViewProps {
   onRefreshData?: () => void;
@@ -62,6 +64,7 @@ export const AdminSentinelView: React.FC<AdminSentinelViewProps> = ({
   const [actionProcessing, setActionProcessing] = useState(false);
   const [unbanConfirmTarget, setUnbanConfirmTarget] = useState<{ id: string; name: string } | null>(null);
   const [internalUsers, setInternalUsers] = useState<User[]>(registeredUsers);
+  const [isHonorCodeOpen, setIsHonorCodeOpen] = useState(false);
 
   const effectiveUsers = internalUsers.length > 0 ? internalUsers : registeredUsers;
 
@@ -233,6 +236,14 @@ export const AdminSentinelView: React.FC<AdminSentinelViewProps> = ({
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh Security Stream</span>
+            </button>
+
+            <button
+              onClick={() => setIsHonorCodeOpen(true)}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <Scale className="w-4 h-4 text-emerald-400" />
+              <span>Inspect Rules & Disciplinary Code</span>
             </button>
           </div>
         </div>
@@ -662,6 +673,13 @@ export const AdminSentinelView: React.FC<AdminSentinelViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Admin Review of Platform Rules & Consequence Rulebook */}
+      <ScholarHonorCodeModal
+        isOpen={isHonorCodeOpen}
+        onClose={() => setIsHonorCodeOpen(false)}
+        user={null}
+      />
     </div>
   );
 };

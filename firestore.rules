@@ -1,0 +1,262 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE HARDENED HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'luvkidjaja@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // --- ENTITY VALIDATION BLUEPRINTS ---
+    function isValidUserProfile(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 128 &&
+             data.role in ['student', 'admin'] &&
+             data.targetExam in ['JAMB', 'WAEC', 'NECO', 'BOTH', 'COMMON_ENTRANCE', 'UNIVERSITY_GST'] &&
+             data.educationLevel in ['primary', 'secondary', 'university'] &&
+             data.premiumPlan in ['free', 'basic', 'medium', 'premium'] &&
+             (!('targetCourse' in data) || (data.targetCourse is string && data.targetCourse.size() <= 150)) &&
+             (!('xp' in data) || (data.xp is number && data.xp >= 0)) &&
+             (!('streakDays' in data) || (data.streakDays is number && data.streakDays >= 0)) &&
+             (!('lastActiveDate' in data) || (data.lastActiveDate is string && data.lastActiveDate.size() <= 50)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    function isValidExamResult(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.examType in ['JAMB', 'WAEC', 'COMMON_ENTRANCE', 'UNIVERSITY_GST'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+             data.totalQuestions is number && data.totalQuestions > 0 &&
+             data.correctCount is number && data.correctCount >= 0 &&
+             data.scorePercentage is number && data.scorePercentage >= 0 && data.scorePercentage <= 100 &&
+             (!('durationMinutes' in data) || data.durationMinutes is number) &&
+             (!('timeSpentSeconds' in data) || data.timeSpentSeconds is number) &&
+             (!('jambScore' in data) || (data.jambScore is number && data.jambScore >= 0 && data.jambScore <= 400)) &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    function isValidBookmark(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.subjectId is string && data.subjectId.size() > 0 && data.subjectId.size() <= 64 &&
+             (!('subjectName' in data) || (data.subjectName is string && data.subjectName.size() <= 100)) &&
+             (!('questionText' in data) || (data.questionText is string && data.questionText.size() <= 2000)) &&
+             (!('savedAt' in data) || (data.savedAt is string && data.savedAt.size() <= 50));
+    }
+
+    function isValidStudyGoal(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 64 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.targetQuestions is number && data.targetQuestions >= 0 &&
+             data.completedQuestions is number && data.completedQuestions >= 0 &&
+             data.date is string && data.date.size() <= 50 &&
+             (!('targetMinutes' in data) || data.targetMinutes is number) &&
+             (!('completedMinutes' in data) || data.completedMinutes is number) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    function isValidForumThread(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 5000 &&
+             data.authorId is string && data.authorId.size() > 0 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 100 &&
+             data.examType in ['ALL', 'JAMB', 'WAEC', 'NECO', 'POST_UTME', 'GENERAL'] &&
+             (!('authorEmail' in data) || (data.authorEmail is string && data.authorEmail.size() <= 128)) &&
+             (!('authorRole' in data) || data.authorRole in ['student', 'admin']) &&
+             (!('subjectId' in data) || (data.subjectId is string && data.subjectId.size() <= 64)) &&
+             (!('subjectName' in data) || (data.subjectName is string && data.subjectName.size() <= 100)) &&
+             (!('views' in data) || (data.views is number && data.views >= 0)) &&
+             (!('likes' in data) || (data.likes is number && data.likes >= 0)) &&
+             (!('replyCount' in data) || (data.replyCount is number && data.replyCount >= 0)) &&
+             (!('isPinned' in data) || data.isPinned is bool) &&
+             (!('isLocked' in data) || data.isLocked is bool) &&
+             (!('isSolved' in data) || data.isSolved is bool) &&
+             (!('solvedReplyId' in data) || (data.solvedReplyId is string && data.solvedReplyId.size() <= 128)) &&
+             (!('moderationStatus' in data) || data.moderationStatus in ['approved', 'flagged', 'hidden']) &&
+             (!('moderationReason' in data) || (data.moderationReason is string && data.moderationReason.size() <= 300)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+             (!('lastReplyAt' in data) || (data.lastReplyAt is string && data.lastReplyAt.size() <= 50));
+    }
+
+    function isValidForumReply(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.threadId is string && data.threadId.size() > 0 && data.threadId.size() <= 128 &&
+             data.authorId is string && data.authorId.size() > 0 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 100 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 3000 &&
+             (!('authorEmail' in data) || (data.authorEmail is string && data.authorEmail.size() <= 128)) &&
+             (!('authorRole' in data) || data.authorRole in ['student', 'admin']) &&
+             (!('likes' in data) || (data.likes is number && data.likes >= 0)) &&
+             (!('isAcceptedAnswer' in data) || data.isAcceptedAnswer is bool) &&
+             (!('isAdminResponse' in data) || data.isAdminResponse is bool) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        incoming().id == userId &&
+        incoming().role == 'student' &&
+        isValidUserProfile(incoming());
+
+      allow update: if (isOwner(userId) || isAdmin()) &&
+        isValidId(userId) &&
+        incoming().id == existing().id &&
+        (isAdmin() || incoming().role == existing().role) &&
+        isValidUserProfile(incoming());
+
+      allow delete: if isAdmin();
+
+      // Nested Bookmarks subcollection
+      match /bookmarks/{bookmarkId} {
+        allow get: if isOwner(userId) || isAdmin();
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isOwner(userId) &&
+          isValidId(bookmarkId) &&
+          incoming().userId == userId &&
+          isValidBookmark(incoming());
+
+        allow update: if isOwner(userId) &&
+          isValidId(bookmarkId) &&
+          incoming().userId == existing().userId &&
+          isValidBookmark(incoming());
+
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // Nested Study Goals subcollection
+      match /study_goals/{goalId} {
+        allow get: if isOwner(userId) || isAdmin();
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isOwner(userId) &&
+          isValidId(goalId) &&
+          incoming().userId == userId &&
+          isValidStudyGoal(incoming());
+
+        allow update: if isOwner(userId) &&
+          isValidId(goalId) &&
+          incoming().userId == existing().userId &&
+          isValidStudyGoal(incoming());
+
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // 2. Exam Results collection
+    match /exam_results/{resultId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() &&
+        isValidId(resultId) &&
+        incoming().userId == request.auth.uid &&
+        isValidExamResult(incoming());
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+
+    // 3. Admins verification collection (System-only read/write)
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 4. Community Forum Threads collection
+    match /forum_threads/{threadId} {
+      allow get: if true;
+      allow list: if true;
+
+      allow create: if isSignedIn() &&
+        isValidId(threadId) &&
+        incoming().id == threadId &&
+        incoming().authorId == request.auth.uid &&
+        isValidForumThread(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(threadId) &&
+        incoming().id == existing().id &&
+        isValidForumThread(incoming()) && (
+          isAdmin() ||
+          // Upvote / view count update
+          (incoming().diff(existing()).affectedKeys().hasOnly(['likes', 'likedBy', 'views'])) ||
+          // Author edits non-locked post or toggles solved
+          (existing().authorId == request.auth.uid && (!('isLocked' in existing()) || existing().isLocked == false) && incoming().authorId == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'updatedAt', 'tags', 'isSolved', 'solvedReplyId'])) ||
+          // Reply counter update
+          (incoming().diff(existing()).affectedKeys().hasOnly(['replyCount', 'lastReplyAt', 'updatedAt']))
+        );
+
+      allow delete: if isAdmin() || (isSignedIn() && existing().authorId == request.auth.uid);
+
+      // Subcollection: Replies to a thread
+      match /replies/{replyId} {
+        allow get: if true;
+        allow list: if true;
+
+        allow create: if isSignedIn() &&
+          isValidId(replyId) &&
+          incoming().id == replyId &&
+          incoming().threadId == threadId &&
+          incoming().authorId == request.auth.uid &&
+          isValidForumReply(incoming());
+
+        allow update: if isSignedIn() &&
+          isValidId(replyId) &&
+          incoming().id == existing().id &&
+          isValidForumReply(incoming()) && (
+            isAdmin() ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['likes', 'likedBy', 'isAcceptedAnswer'])) ||
+            (existing().authorId == request.auth.uid && incoming().authorId == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']))
+          );
+
+        allow delete: if isAdmin() || (isSignedIn() && existing().authorId == request.auth.uid);
+      }
+    }
+  }
+}

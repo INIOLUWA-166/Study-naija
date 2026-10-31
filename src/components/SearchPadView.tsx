@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
   BookOpen, 
@@ -15,10 +15,15 @@ import {
   GraduationCap,
   ChevronRight,
   TrendingUp,
-  Zap
+  Zap,
+  Clock,
+  History,
+  Trash2,
+  X
 } from 'lucide-react';
 import { TopicItem, Subject, User } from '../types';
 import { SYLLABUS_TOPICS } from '../utils/syllabusTopics';
+import { searchHistoryManager } from '../utils/searchHistoryManager';
 
 interface SearchPadViewProps {
   user: User | null;
@@ -38,6 +43,44 @@ export const SearchPadView: React.FC<SearchPadViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string>('ALL');
   const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => searchHistoryManager.getHistory('syllabus'));
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setSearchHistory(searchHistoryManager.getHistory('syllabus'));
+    };
+    window.addEventListener('studynaija_search_history_updated', handleUpdate);
+    return () => window.removeEventListener('studynaija_search_history_updated', handleUpdate);
+  }, []);
+
+  // Debounced search history recording
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length >= 3) {
+      const timer = setTimeout(() => {
+        searchHistoryManager.addSearch(trimmed, 'syllabus');
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchQuery]);
+
+  const handleSelectSearch = (term: string) => {
+    setSearchQuery(term);
+    searchHistoryManager.addSearch(term, 'syllabus');
+    setIsDropdownOpen(false);
+  };
+
+  const handleRemoveItem = (e: React.MouseEvent, term: string) => {
+    e.stopPropagation();
+    searchHistoryManager.removeSearch(term, 'syllabus');
+  };
+
+  const handleClearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    searchHistoryManager.clearHistory('syllabus');
+  };
+
   const [savedTopicIds, setSavedTopicIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -117,28 +160,127 @@ export const SearchPadView: React.FC<SearchPadViewProps> = ({
             Get core definitions, standard formulas, high-yield traps, and launch direct 10-question practice drills.
           </p>
 
-          {/* Primary Search Input */}
+          {/* Primary Search Input with Search History Dropdown */}
           <div className="pt-2">
             <div className="relative max-w-2xl">
-              <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
+              <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
               <input
                 id="topic-search-input"
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setIsDropdownOpen(true)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && searchQuery.trim()) {
+                    handleSelectSearch(searchQuery.trim());
+                  }
+                }}
                 placeholder="Search any topic, formula, law, rule (e.g. 'Quadratic', 'Concord', 'Newton', 'Acid', 'Demand')..."
-                className="w-full pl-12 pr-10 py-3.5 bg-white text-slate-900 rounded-2xl border-2 border-emerald-400/80 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 shadow-md text-sm sm:text-base outline-none transition-all placeholder:text-slate-400 font-medium"
+                className="w-full pl-12 pr-16 py-3.5 bg-white text-slate-900 rounded-2xl border-2 border-emerald-400/80 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 shadow-md text-sm sm:text-base outline-none transition-all placeholder:text-slate-400 font-medium"
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg cursor-pointer"
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-xl cursor-pointer font-bold flex items-center gap-1"
                 >
-                  Clear
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear</span>
                 </button>
+              )}
+
+              {/* Search History Dropdown */}
+              {isDropdownOpen && searchHistory.length > 0 && (
+                <div 
+                  className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl z-30 p-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-150 text-slate-900"
+                  onMouseDown={e => e.preventDefault()}
+                >
+                  <div className="flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    <span className="flex items-center gap-1.5 text-emerald-800">
+                      <History className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Recent Topic Searches</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className="text-[10px] text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Clear All</span>
+                    </button>
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto divide-y divide-slate-50">
+                    {searchHistory.map((term, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleSelectSearch(term)}
+                        className="group flex items-center justify-between px-3 py-2 rounded-xl hover:bg-emerald-50 text-slate-800 hover:text-emerald-950 text-xs font-semibold cursor-pointer transition"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Clock className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0" />
+                          <span className="truncate">{term}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => handleRemoveItem(e, term)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer"
+                          title="Remove item"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-1.5 px-3 border-t border-slate-100 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                    >
+                      Close Dropdown
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
+
+          {/* Recent Search History Chips (Persistent) */}
+          {searchHistory.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+              <span className="text-emerald-300 font-bold mr-1 text-[11px] flex items-center gap-1">
+                <History className="w-3 h-3 text-emerald-400" />
+                <span>Recent:</span>
+              </span>
+              {searchHistory.slice(0, 6).map((term, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => handleSelectSearch(term)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-emerald-900/60 text-slate-200 hover:text-emerald-200 text-[11px] font-medium transition-all border border-slate-700 hover:border-emerald-500 cursor-pointer group"
+                >
+                  <Clock className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-400 shrink-0" />
+                  <span className="truncate max-w-[130px]">{term}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveItem(e, term)}
+                    className="p-0.5 rounded-full hover:bg-slate-700 text-slate-400 hover:text-rose-400 transition"
+                    title="Delete"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="text-[10px] text-slate-400 hover:text-rose-300 transition underline ml-1 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          )}
 
           {/* Quick Click Topic Suggestions */}
           <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
@@ -146,7 +288,7 @@ export const SearchPadView: React.FC<SearchPadViewProps> = ({
             {quickPicks.map((pick, idx) => (
               <button
                 key={idx}
-                onClick={() => setSearchQuery(pick.query)}
+                onClick={() => handleSelectSearch(pick.query)}
                 className="px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-emerald-600 text-slate-300 hover:text-white text-[11px] font-medium transition-all border border-slate-700 cursor-pointer"
               >
                 {pick.label}

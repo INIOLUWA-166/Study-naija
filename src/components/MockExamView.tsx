@@ -26,10 +26,12 @@ import {
   Lightbulb,
   ShieldCheck,
   Zap,
-  Calculator
+  Calculator,
+  Scale
 } from 'lucide-react';
 import { Subject, Question, ExamResult, User } from '../types';
 import { api } from '../services/api';
+import { saveExamResultToFirestore } from '../services/firebase';
 import { shuffleQuestionOptions } from '../utils/questionBank';
 import { createDynamicQuestionVariant, shuffleQuestionOptionsFair } from '../utils/questionRandomizer';
 import { aiVoice, VoiceFeedbackContent } from '../utils/aiVoice';
@@ -49,13 +51,15 @@ interface MockExamViewProps {
   user: User | null;
   onNavigate: (view: string, extra?: any) => void;
   preferredSubject?: string;
+  onOpenHonorCode?: () => void;
 }
 
 export const MockExamView: React.FC<MockExamViewProps> = ({
   subjects,
   user,
   onNavigate,
-  preferredSubject
+  preferredSubject,
+  onOpenHonorCode
 }) => {
   // Phase: 'config' | 'in-progress' | 'result' | 'review'
   const [phase, setPhase] = useState<'config' | 'in-progress' | 'result' | 'review'>('config');
@@ -402,6 +406,7 @@ export const MockExamView: React.FC<MockExamViewProps> = ({
         speedBonusPoints: speedBonusTotal
       });
       setExamResult(result);
+      saveExamResultToFirestore(result).catch(() => {});
       setPhase('result');
       const pct = result.scorePercentage ?? (result.totalQuestions > 0 ? (result.correctCount / result.totalQuestions) * 100 : 0);
       const fb = aiVoice.speakExamFeedback(pct, user?.name);
@@ -700,6 +705,43 @@ export const MockExamView: React.FC<MockExamViewProps> = ({
                   {opt.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Official CBT Proctoring Standards & Rules Agreement */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-emerald-500/30 text-white space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <h4 className="font-bold text-xs sm:text-sm text-emerald-300">
+                  CBT Proctoring Standards & Malpractice Policy
+                </h4>
+              </div>
+              {onOpenHonorCode && (
+                <button
+                  type="button"
+                  onClick={onOpenHonorCode}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer underline"
+                >
+                  <Scale className="w-3 h-3" />
+                  <span>Full Rules & Penalties</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] text-slate-300">
+              <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="font-bold text-amber-300 block mb-0.5">⚠️ Tab-Switch Rule</span>
+                <span>Max 2 tab changes allowed. 3rd off-screen navigation forces paper submission marked as Unranked.</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="font-bold text-rose-300 block mb-0.5">🚫 Zero Runs & Expo</span>
+                <span>All questions are dynamically generated with randomized options. Leaked answer keys are ineffective.</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="font-bold text-cyan-300 block mb-0.5">⏱️ Velocity Heuristics</span>
+                <span>Sub-2 second answers on calculation problems are flagged for AI Sentinel cognitive audit.</span>
+              </div>
             </div>
           </div>
 

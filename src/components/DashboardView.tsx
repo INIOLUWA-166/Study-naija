@@ -31,10 +31,14 @@ import {
   FileQuestion,
   User as UserIcon,
   Sun,
-  Moon
+  Moon,
+  Scale,
+  Globe,
+  Newspaper
 } from 'lucide-react';
 import { User, ExamResult, Question, AchievementBadge, WeeklyStudyGoal, WeeklyStudyGoalsState } from '../types';
 import { api } from '../services/api';
+import { removeBookmarkFromFirestore, fetchUserExamResultsFromFirestore } from '../services/firebase';
 import { gamification, getRankFromXp } from '../utils/gamification';
 import { achievementManager } from '../utils/achievementBadges';
 import { weeklyGoalsManager } from '../utils/weeklyGoalsManager';
@@ -57,6 +61,7 @@ interface DashboardViewProps {
   onOpenAITutor?: (topic?: string, subjectName?: string) => void;
   onOpenProfile?: () => void;
   onOpenGoogleWorkspace?: () => void;
+  onOpenHonorCode?: () => void;
   initialTab?: 'overview' | 'weekly-goals' | 'saved-questions' | 'leaderboard' | 'badges';
 }
 
@@ -68,6 +73,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAITutor,
   onOpenProfile,
   onOpenGoogleWorkspace,
+  onOpenHonorCode,
   initialTab = 'overview'
 }) => {
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -134,6 +140,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setLoading(true);
       try {
         const data = await api.getDashboardStats();
+        if (user?.id) {
+          try {
+            const firestoreExams = await fetchUserExamResultsFromFirestore(user.id);
+            if (firestoreExams.length > 0) {
+              const merged = [...firestoreExams, ...(data?.recentExams || [])];
+              const seen = new Set<string>();
+              const uniqueExams = merged.filter(ex => {
+                if (seen.has(ex.id)) return false;
+                seen.add(ex.id);
+                return true;
+              });
+              data.recentExams = uniqueExams;
+            }
+          } catch (fsErr) {
+            console.warn('Could not fetch exam results from Firestore:', fsErr);
+          }
+        }
         setDashboardData(data);
       } catch {
         // Handled
@@ -187,6 +210,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     try {
       await api.toggleBookmarkQuestion(qId, false);
     } catch {}
+    if (user?.id) {
+      removeBookmarkFromFirestore(user.id, qId).catch(() => {});
+    }
   };
 
   const studentName = user?.name || dashboardData?.user?.name || 'Candidate';
@@ -310,6 +336,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           >
             <Search className="w-3.5 h-3.5 text-cyan-400" />
             <span>Search Pad</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('news-agent')}
+            className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-1.5 cursor-pointer hover:scale-102"
+            title="Real-Time News & Live Fact-Checker Agent with Google Search Grounding"
+          >
+            <Newspaper className="w-3.5 h-3.5 text-emerald-200" />
+            <span>News & Fact-Checker 📰</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('question-grabber')}
+            className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-black text-xs rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center gap-1.5 cursor-pointer hover:scale-102"
+            title="Grab past questions of JAMB, WAEC & NECO from any website link or paper"
+          >
+            <Globe className="w-3.5 h-3.5 text-cyan-200" />
+            <span>Past Q Grabber</span>
           </button>
 
           <button
@@ -604,21 +648,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </span>
         </button>
 
-        <button
-          onClick={() => onOpenGoogleWorkspace?.()}
-          className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap bg-blue-950/70 hover:bg-blue-900 text-blue-200 border border-blue-500/40 shadow-xs ml-auto"
-        >
-          <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-          </svg>
-          <span>Google Workspace Sync</span>
-          <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-blue-500/30 text-blue-200">
-            Cloud
-          </span>
-        </button>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => onOpenGoogleWorkspace?.()}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap bg-blue-950/70 hover:bg-blue-900 text-blue-200 border border-blue-500/40 shadow-xs ml-auto"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            <span>Google Workspace Sync</span>
+            <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-blue-500/30 text-blue-200">
+              Cloud
+            </span>
+          </button>
+        )}
       </div>
 
       {/* VIEW 1: SAVED QUESTIONS LIST FOR REVIEW */}
@@ -1020,6 +1066,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
             </div>
+
+            {onOpenHonorCode && (
+              <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-800 text-xs relative z-10">
+                <span className="text-slate-400 text-[11px]">
+                  Protected by SabiGuard Proctoring • 3-Strike Tab-Switch Policy & Anti-Cheat Telemetry
+                </span>
+                <button
+                  type="button"
+                  onClick={onOpenHonorCode}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>View Official Rules, Standings & Appeals →</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* CHAMPIONS LEAGUE ARENA & UEFA INTRO SPOTLIGHT BANNER */}
@@ -1327,94 +1389,95 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          {/* GOOGLE WORKSPACE ACADEMIC CLOUD INTEGRATION CARD */}
-          <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 border border-blue-500/30 shadow-[0_10px_30px_rgba(59,130,246,0.12)] space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-md">
-                  <svg className="w-6 h-6" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                  </svg>
+          {user?.role === 'admin' && (
+            <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 border border-blue-500/30 shadow-[0_10px_30px_rgba(59,130,246,0.12)] space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-md">
+                    <svg className="w-6 h-6" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white font-['Outfit'] flex items-center gap-2">
+                      <span>Google Workspace Academic Cloud Hub</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                        LIVE CLOUD SYNC
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-300">
+                      Connect your Google Account to export test analytics to Sheets, study notes to Docs, sync Classroom coursework, and create practice Forms.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base font-black text-white font-['Outfit'] flex items-center gap-2">
-                    <span>Google Workspace Academic Cloud Hub</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                      LIVE CLOUD SYNC
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    Connect your Google Account to export test analytics to Sheets, study notes to Docs, sync Classroom coursework, and create practice Forms.
+
+                <button
+                  onClick={() => onOpenGoogleWorkspace?.()}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-400 hover:to-indigo-400 text-white font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md hover:scale-102 shrink-0"
+                >
+                  <span>Launch Google Hub</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div 
+                  onClick={() => onOpenGoogleWorkspace?.()}
+                  className="p-3 rounded-2xl bg-slate-900/80 border border-emerald-500/20 hover:border-emerald-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
+                >
+                  <div className="flex items-center gap-2 font-bold text-emerald-400">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Google Sheets</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Export mock test scores, percentages, and performance breakdowns directly to Google Sheets.
+                  </p>
+                </div>
+
+                <div 
+                  onClick={() => onOpenGoogleWorkspace?.()}
+                  className="p-3 rounded-2xl bg-slate-900/80 border border-blue-500/20 hover:border-blue-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
+                >
+                  <div className="flex items-center gap-2 font-bold text-blue-400">
+                    <FileText className="w-4 h-4" />
+                    <span>Google Docs</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Generate revision summaries, high-yield formulas, and exam tips in a formatted Google Doc.
+                  </p>
+                </div>
+
+                <div 
+                  onClick={() => onOpenGoogleWorkspace?.()}
+                  className="p-3 rounded-2xl bg-slate-900/80 border border-emerald-500/20 hover:border-emerald-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
+                >
+                  <div className="flex items-center gap-2 font-bold text-emerald-300">
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Google Classroom</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Sync your active school courses and view coursework assignments alongside JAMB prep goals.
+                  </p>
+                </div>
+
+                <div 
+                  onClick={() => onOpenGoogleWorkspace?.()}
+                  className="p-3 rounded-2xl bg-slate-900/80 border border-purple-500/20 hover:border-purple-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
+                >
+                  <div className="flex items-center gap-2 font-bold text-purple-400">
+                    <FileQuestion className="w-4 h-4" />
+                    <span>Google Forms</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Create customized CBT quiz forms with past JAMB questions inside your own Google account.
                   </p>
                 </div>
               </div>
-
-              <button
-                onClick={() => onOpenGoogleWorkspace?.()}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-400 hover:to-indigo-400 text-white font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md hover:scale-102 shrink-0"
-              >
-                <span>Launch Google Hub</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              <div 
-                onClick={() => onOpenGoogleWorkspace?.()}
-                className="p-3 rounded-2xl bg-slate-900/80 border border-emerald-500/20 hover:border-emerald-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
-              >
-                <div className="flex items-center gap-2 font-bold text-emerald-400">
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Google Sheets</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Export mock test scores, percentages, and performance breakdowns directly to Google Sheets.
-                </p>
-              </div>
-
-              <div 
-                onClick={() => onOpenGoogleWorkspace?.()}
-                className="p-3 rounded-2xl bg-slate-900/80 border border-blue-500/20 hover:border-blue-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
-              >
-                <div className="flex items-center gap-2 font-bold text-blue-400">
-                  <FileText className="w-4 h-4" />
-                  <span>Google Docs</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Generate revision summaries, high-yield formulas, and exam tips in a formatted Google Doc.
-                </p>
-              </div>
-
-              <div 
-                onClick={() => onOpenGoogleWorkspace?.()}
-                className="p-3 rounded-2xl bg-slate-900/80 border border-emerald-500/20 hover:border-emerald-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
-              >
-                <div className="flex items-center gap-2 font-bold text-emerald-300">
-                  <GraduationCap className="w-4 h-4" />
-                  <span>Google Classroom</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Sync your active school courses and view coursework assignments alongside JAMB prep goals.
-                </p>
-              </div>
-
-              <div 
-                onClick={() => onOpenGoogleWorkspace?.()}
-                className="p-3 rounded-2xl bg-slate-900/80 border border-purple-500/20 hover:border-purple-500/50 transition-all cursor-pointer space-y-1 hover:bg-slate-900"
-              >
-                <div className="flex items-center gap-2 font-bold text-purple-400">
-                  <FileQuestion className="w-4 h-4" />
-                  <span>Google Forms</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Create customized CBT quiz forms with past JAMB questions inside your own Google account.
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* STORY BOOKS & LITERATURE SECTION (DASHBOARD LOBBY) */}
           <StoryBooksLobbySection

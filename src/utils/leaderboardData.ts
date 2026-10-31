@@ -236,6 +236,13 @@ export function generateLeaderboard(
   const currentXp = gamification.getXp(currentUser);
   const currentStreak = gamification.getStreak(currentUser).streak;
 
+  // IMPORTANT: Points earned from story/literature comprehension quizzes do NOT count towards the competitive CBT leaderboard.
+  // We ensure any story quiz points are excluded so rankings reflect 100% verified CBT mock exam preparation.
+  const currentUserStoryPoints = (currentUser?.storyReaderPoints || 0) + (
+    typeof window !== 'undefined' ? (parseInt(localStorage.getItem('studynaija_story_reader_points') || '0', 10) || 0) : 0
+  );
+  const currentAcademicXp = Math.max(0, currentXp - currentUserStoryPoints);
+
   // Compute start of current month for monthly reset
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
@@ -287,7 +294,10 @@ export function generateLeaderboard(
       accuracy = user.stats?.averageScore || 75;
     }
 
-    const xp = isCurrent ? currentXp : ((user.stats?.questionsAnswered || 10) * 15 + (score > 0 ? score : 50));
+    const candidateStoryPoints = (user.storyReaderPoints || 0);
+    const xp = isCurrent 
+      ? currentAcademicXp 
+      : Math.max(0, ((user.stats?.questionsAnswered || 10) * 15 + (score > 0 ? score : 50)) - candidateStoryPoints);
     const streak = isCurrent ? (currentStreak || 1) : 3;
 
     // Subject breakdown
@@ -447,7 +457,7 @@ export function generateLeaderboard(
   let nextCompetitorName = 'Rank #1 Champion';
   if (userRankIndex > 0) {
     const aheadCompetitor = rankedEntries[userRankIndex - 1];
-    pointsToNextRank = Math.max(15, (aheadCompetitor.score - userScore) * 10 || (aheadCompetitor.xp - (currentUser ? currentXp : 100)) || 25);
+    pointsToNextRank = Math.max(15, (aheadCompetitor.score - userScore) * 10 || (aheadCompetitor.xp - (currentUser ? currentAcademicXp : 100)) || 25);
     nextCompetitorName = aheadCompetitor.name;
   }
 

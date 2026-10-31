@@ -1147,6 +1147,9 @@ export const StudentLeaderboard: React.FC<StudentLeaderboardProps> = ({
                     <li>
                       <strong>Fair Play & Dynamic Anti-Copying:</strong> Nobody gets the same questions on any day. Questions are dynamically generated and randomized daily. Even if a question template appears, numerical parameters and variables are altered so the correct answer is different. Answer choices (A, B, C, D) are permuted per student to make copying completely impossible and maintain total leaderboard fairness.
                     </li>
+                    <li>
+                      <strong>CBT Mock Exam & Syllabus Scoring Only:</strong> Leaderboard points and CSI rankings are earned exclusively through verified timed CBT mock exams and syllabus question practice. Literature story comprehension quizzes award separate reading points and do NOT count towards competitive leaderboard standings.
+                    </li>
                   </ul>
                 </div>
               </div>

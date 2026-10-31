@@ -1,6 +1,7 @@
 import { Subject, Question, Article, PricingPlan, EducationLevel } from './types';
 import { PRIMARY_SUBJECTS, UNIVERSITY_SUBJECTS, PRIMARY_QUESTIONS, UNIVERSITY_QUESTIONS } from './data/educationQuestions';
 import { EXTENDED_QUESTIONS } from './utils/questionBank';
+import { ADDITIONAL_SECONDARY_SUBJECTS, ADDITIONAL_SUBJECT_QUESTIONS } from './data/expandedSubjectsQuestions';
 
 export const SECONDARY_SUBJECTS: Subject[] = [
   {
@@ -9,6 +10,7 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     code: 'ENG',
     icon: 'BookOpen',
     educationLevel: 'secondary',
+    department: 'general',
     description: 'Lexis & Structure, Comprehension, Antonyms, Synonyms, Oral English, and Prescribed Literary Texts.',
     topics: ['Lexis & Structure', 'Comprehension Passages', 'Synonyms & Antonyms', 'Oral English & Phonology', 'The Life Changer & Novels', 'Idioms & Collocations'],
     questionCount: 120,
@@ -19,6 +21,7 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     name: 'Mathematics',
     code: 'MTH',
     icon: 'Binary',
+    department: 'general',
     description: 'Algebra, Quadratic Equations, Indices & Logarithms, Trigonometry, Calculus, and Statistics.',
     topics: ['Algebra & Linear Equations', 'Indices & Logarithms', 'Trigonometry', 'Calculus (Differentiation & Integration)', 'Statistics & Probability', 'Geometry & Mensuration'],
     questionCount: 110,
@@ -29,6 +32,7 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     name: 'Biology',
     code: 'BIO',
     icon: 'Dna',
+    department: 'science',
     description: 'Cell structure, Genetics & Heredity, Ecology, Nutrition, Hormones, Transport & Nervous systems.',
     topics: ['Cell Biology & Organization', 'Genetics & Heredity', 'Ecology & Ecosystems', 'Nutrition & Digestion', 'Excretory & Circulatory Systems', 'Reproduction in Plants & Animals'],
     questionCount: 95,
@@ -39,6 +43,7 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     name: 'Chemistry',
     code: 'CHM',
     icon: 'FlaskConical',
+    department: 'science',
     description: 'Atomic structure, Stoichiometry, Acids/Bases & Salts, Organic Chemistry, Chemical Energetics.',
     topics: ['Atomic Structure & Periodic Table', 'Chemical Bonding & Stoichiometry', 'Acids, Bases & Salts', 'Organic Chemistry (Hydrocarbons)', 'Chemical Kinetics & Equilibrium', 'Electrochemistry'],
     questionCount: 90,
@@ -49,6 +54,7 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     name: 'Physics',
     code: 'PHY',
     icon: 'Atom',
+    department: 'science',
     description: 'Mechanics, Newton laws, Heat & Thermodynamics, Waves & Sound, Current Electricity, Magnetism.',
     topics: ['Mechanics & Newton Laws', 'Work, Energy & Power', 'Waves, Sound & Optics', 'Heat Energy & Gas Laws', 'Current Electricity & Circuits', 'Modern Physics & Radioactivity'],
     questionCount: 88,
@@ -59,6 +65,7 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     name: 'Economics',
     code: 'ECO',
     icon: 'TrendingUp',
+    department: 'commercial',
     description: 'Basic economic concepts, Elasticity, Theory of Production, National Income, Money & Banking in Nigeria.',
     topics: ['Basic Economic Concepts & Scarcity', 'Price Theory: Demand & Supply', 'Theory of Consumer Behavior', 'National Income Accounting', 'Money, Banking & Monetary Policy', 'International Trade & ECOWAS'],
     questionCount: 85,
@@ -69,11 +76,13 @@ export const SECONDARY_SUBJECTS: Subject[] = [
     name: 'Government',
     code: 'GOV',
     icon: 'Landmark',
+    department: 'art',
     description: 'Political systems, Nigerian Constitutions, Pre-colonial systems (Hausa/Fulani, Yoruba, Igbo), Foreign Policy.',
     topics: ['Concepts of State & Sovereignty', 'Arms & Forms of Government', 'Pre-colonial Systems in Nigeria', 'Constitutional Development (1922-1999)', 'Federalism in Nigeria', 'Nigerian Foreign Policy & ECOWAS'],
     questionCount: 80,
     featured: true,
   },
+  ...ADDITIONAL_SECONDARY_SUBJECTS
 ];
 
 export const INITIAL_SUBJECTS: Subject[] = [
@@ -1626,6 +1635,7 @@ export const SECONDARY_QUESTIONS: Question[] = [
 
 export const INITIAL_QUESTIONS: Question[] = [
   ...SECONDARY_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
+  ...ADDITIONAL_SUBJECT_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
   ...EXTENDED_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
   ...PRIMARY_QUESTIONS,
   ...UNIVERSITY_QUESTIONS

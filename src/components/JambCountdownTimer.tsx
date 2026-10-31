@@ -20,7 +20,7 @@ const CACHE_KEY = 'studynaija_jamb_countdown_v1';
 
 interface JambCountdownTimerProps {
   onNavigate?: (view: string, extra?: any) => void;
-  variant?: 'banner' | 'pill' | 'standalone';
+  variant?: 'banner' | 'pill' | 'standalone' | 'home' | 'card';
 }
 
 export const JambCountdownTimer: React.FC<JambCountdownTimerProps> = ({
@@ -164,6 +164,160 @@ export const JambCountdownTimer: React.FC<JambCountdownTimerProps> = ({
             LIVE
           </span>
         </button>
+
+        {/* Roadmap Modal */}
+        {isModalOpen && (
+          <CountdownRoadmapModal
+            data={data}
+            timeLeft={timeLeft}
+            formattedDate={formattedExamDate}
+            onClose={() => setIsModalOpen(false)}
+            onNavigate={(view) => {
+              setIsModalOpen(false);
+              if (onNavigate) onNavigate(view);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // 1b. HOME / CARD VARIANT: Prominent visual countdown display for the Home Screen
+  if (variant === 'home' || variant === 'card' || variant === 'standalone') {
+    return (
+      <>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 border-2 border-emerald-500/40 text-white shadow-2xl p-5 sm:p-7">
+          {/* Subtle background glow */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-72 h-72 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="relative z-10 space-y-5">
+            {/* Header Strip with Badges */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-bold uppercase tracking-wider">
+                  <span className="text-base leading-none">🇳🇬</span>
+                  <span>Official JAMB UTME Schedule</span>
+                </span>
+
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
+                  <span>LIVE CBT COUNTDOWN</span>
+                </span>
+              </div>
+
+              {/* Status & Phase */}
+              <div className="text-xs font-medium text-emerald-300/90 flex items-center gap-1.5 bg-slate-900/80 px-3 py-1 rounded-full border border-emerald-500/20">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Phase: <strong className="text-white">{data.syllabusPhase}</strong></span>
+              </div>
+            </div>
+
+            {/* Countdown Main Display */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              {/* Days */}
+              <div 
+                onClick={() => setIsModalOpen(true)}
+                className="group cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-850 p-4 border border-emerald-500/30 hover:border-emerald-400 transition-all text-center shadow-lg hover:shadow-emerald-500/10 hover:scale-[1.02]"
+              >
+                <div className="font-mono text-3xl sm:text-5xl font-black text-emerald-400 tracking-tight">
+                  {timeLeft.days}
+                </div>
+                <div className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-slate-300 mt-1 flex items-center justify-center gap-1">
+                  <span>Days</span>
+                  <span className="text-[10px] text-emerald-400 font-semibold">• UTME</span>
+                </div>
+              </div>
+
+              {/* Hours */}
+              <div 
+                onClick={() => setIsModalOpen(true)}
+                className="group cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-850 p-4 border border-slate-750 hover:border-cyan-400 transition-all text-center shadow-lg hover:scale-[1.02]"
+              >
+                <div className="font-mono text-3xl sm:text-5xl font-black text-white tracking-tight">
+                  {pad(timeLeft.hours)}
+                </div>
+                <div className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-slate-300 mt-1">
+                  Hours
+                </div>
+              </div>
+
+              {/* Minutes */}
+              <div 
+                onClick={() => setIsModalOpen(true)}
+                className="group cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-850 p-4 border border-slate-750 hover:border-cyan-400 transition-all text-center shadow-lg hover:scale-[1.02]"
+              >
+                <div className="font-mono text-3xl sm:text-5xl font-black text-white tracking-tight">
+                  {pad(timeLeft.minutes)}
+                </div>
+                <div className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-slate-300 mt-1">
+                  Minutes
+                </div>
+              </div>
+
+              {/* Seconds */}
+              <div 
+                onClick={() => setIsModalOpen(true)}
+                className="group cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-850 p-4 border border-amber-500/30 hover:border-amber-400 transition-all text-center shadow-lg hover:scale-[1.02]"
+              >
+                <div className="font-mono text-3xl sm:text-5xl font-black text-amber-300 tracking-tight flex items-center justify-center gap-1">
+                  <span>{pad(timeLeft.seconds)}</span>
+                </div>
+                <div className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-amber-300/90 mt-1 flex items-center justify-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                  <span>Seconds</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Official Date & Centers Ribbon */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1 border-t border-slate-800 text-xs text-slate-300">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  Official Exam Date: <strong className="text-white font-semibold">{formattedExamDate}</strong> (08:00 WAT)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 text-slate-400 text-[11px]">
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                <span>750+ Accredited CBT Centers Nationwide</span>
+              </div>
+            </div>
+
+            {/* Quick Learning Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => onNavigate && onNavigate('practice', { examType: 'JAMB' })}
+                className="flex-1 min-w-[200px] py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs sm:text-sm transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20"
+              >
+                <BookOpen className="w-4 h-4 text-slate-950" />
+                <span>Start Practicing JAMB Now</span>
+                <ArrowRight className="w-4 h-4 text-slate-950" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigate && onNavigate('mock-exam', { examType: 'JAMB' })}
+                className="py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm border border-cyan-500/30 hover:border-cyan-400 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Timer className="w-4 h-4 text-cyan-400" />
+                <span>Full 8-Key CBT Mock Exam</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="py-3 px-3.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-800"
+                title="View full registration dates, mock dates, and syllabus cheat sheet"
+              >
+                <span>Timeline & Tips</span>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Roadmap Modal */}
         {isModalOpen && (

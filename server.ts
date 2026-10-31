@@ -12,7 +12,7 @@ import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_QUESTIONS, INITIAL_SUBJECTS, STUDY_ARTICLES, PRICING_PLANS } from './src/mockData';
-import { User, Question, Subject, Article, ExamResult, AdminStats, MonthlyWinnerRecord, AdminNotification, CommunityMessage, CommunityChannel, ModerationResult, SmartWebInsights, TournamentState, TournamentBankClaim, SecurityIncident, OffenseType } from './src/types';
+import { User, Question, Subject, Article, ExamResult, AdminStats, MonthlyWinnerRecord, AdminNotification, CommunityMessage, CommunityChannel, ModerationResult, SmartWebInsights, TournamentState, TournamentBankClaim, SecurityIncident, OffenseType, ForumThread, ForumReply, ForumExamCategory } from './src/types';
 import { setupArenaServer, getVerifiedArenaMatch } from './src/serverArena';
 import { generateLeaderboard, getMonthlySeasonInfo, MONTHLY_PRIZES } from './src/utils/leaderboardData';
 import { initializeTournamentState } from './src/utils/tournamentManager';
@@ -24,6 +24,13 @@ import {
   getTodayWatString
 } from './src/utils/questionRandomizer';
 import { generateNaijaAIResponse } from './src/utils/naijaAIEngine';
+import {
+  PRESET_PAST_QUESTION_SOURCES,
+  fetchWebpageContent,
+  cleanHtmlToText,
+  harvestWithGemini,
+  harvestFromArchiveSearch
+} from './src/services/questionHarvester';
 
 const app = express();
 const server = http.createServer(app);
@@ -537,17 +544,289 @@ function saveSyncCodes() {
   } catch {}
 }
 
+const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
+
+function loadQuestions(): Question[] {
+  try {
+    if (fs.existsSync(QUESTIONS_FILE)) {
+      const raw = fs.readFileSync(QUESTIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.error('Failed to load questions from disk:', err);
+  }
+  return [...INITIAL_QUESTIONS];
+}
+
+function saveQuestions() {
+  try {
+    fs.writeFileSync(QUESTIONS_FILE, JSON.stringify(questions, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save questions to disk:', err);
+  }
+}
+
+// -------------------------------------------------------------
+// COMMUNITY FORUM PERSISTENCE & INITIAL SEED THREADS
+// -------------------------------------------------------------
+const FORUM_THREADS_FILE = path.join(DATA_DIR, 'forum_threads.json');
+
+const INITIAL_FORUM_THREADS: ForumThread[] = [
+  {
+    id: 'thread-jamb-2027-guide',
+    title: '📌 Official JAMB UTME 2027 Subject Combinations & 300+ Target Strategy',
+    content: `Welcome to the StudyNaija Community Forum! 🇳🇬\n\nWhen registering for JAMB UTME, choosing the correct 4-subject combination is strictly required by the Central Admissions Processing System (CAPS). A single incorrect subject can invalidate an entire admission year.\n\n### Popular Faculty Combinations:\n- **Medicine / Surgery & Nursing**: English Language + Biology + Chemistry + Physics\n- **Engineering (Mechanical, Electrical, Civil, Software)**: English + Mathematics + Physics + Chemistry\n- **Law**: English + Literature in English + Government + CRS/IRS or Economics\n- **Accounting / Finance / Business**: English + Mathematics + Economics + Government or Commerce\n- **Computer Science**: English + Mathematics + Physics + Chemistry (or Biology/Geography for some universities)\n\nDrop your target course and intended university in the replies below if you need course validation or Post-UTME advice!`,
+    authorId: 'admin_inioluwa',
+    authorName: 'Inioluwa (Founder & Admin)',
+    authorEmail: 'luvkidjaja@gmail.com',
+    authorRole: 'admin',
+    authorTournamentBadge: '1st',
+    authorThemeVariant: 'gold',
+    examType: 'JAMB',
+    subjectId: 'general',
+    subjectName: 'General Studies',
+    tags: ['jamb2027', 'syllabus', 'admissions', 'official'],
+    views: 420,
+    likes: 85,
+    likedBy: [],
+    replyCount: 3,
+    isPinned: true,
+    isLocked: false,
+    isSolved: false,
+    moderationStatus: 'approved',
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastReplyAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    replies: [
+      {
+        id: 'reply-1',
+        threadId: 'thread-jamb-2027-guide',
+        authorId: 'user-scholar-1',
+        authorName: 'Tunde Bakare',
+        authorEmail: 'tunde@gmail.com',
+        authorRole: 'student',
+        content: 'Thank you for this guide sir! For Computer Engineering at UNILAG, does Further Maths replace Chemistry or is Chemistry compulsory?',
+        likes: 6,
+        likedBy: [],
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        id: 'reply-2',
+        threadId: 'thread-jamb-2027-guide',
+        authorId: 'admin_inioluwa',
+        authorName: 'Inioluwa (Founder & Admin)',
+        authorEmail: 'luvkidjaja@gmail.com',
+        authorRole: 'admin',
+        authorTournamentBadge: '1st',
+        authorThemeVariant: 'gold',
+        content: 'Good question @Tunde Bakare. For UNILAG Faculty of Engineering, the JAMB UTME combination is strictly English, Mathematics, Physics, and Chemistry. Further Maths is great for your O-level WAEC distinctions, but Chemistry is non-negotiable in UTME.',
+        likes: 14,
+        likedBy: [],
+        isAdminResponse: true,
+        createdAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        id: 'reply-3',
+        threadId: 'thread-jamb-2027-guide',
+        authorId: 'user-scholar-2',
+        authorName: 'Chioma Okeke',
+        authorRole: 'student',
+        content: 'Clear and concise! Bookmarking this thread for my study group.',
+        likes: 4,
+        likedBy: [],
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      }
+    ]
+  },
+  {
+    id: 'thread-waec-english-summary',
+    title: '📚 WAEC English Language: How to score 25/30 in Summary Writing Section',
+    content: `Most students lose valuable marks in Section B of WAEC English Language Paper 2 (Summary). Here are 4 golden rules to guarantee at least 25/30:\n\n1. **Sentence Format is Non-Negotiable**: Answers must be written in full grammatical sentences. Phrases, hanging clauses, or bulleted nouns receive an automatic zero for expression.\n2. **Avoid "Mindless Lifting"**: Do not copy entire lines word-for-word from the passage. Extract the core kernel, substitute with your own synonyms, and rephrase in clear simple English.\n3. **One Idea Per Sentence**: If the question asks for 3 reasons, write exactly three separate sentences labeled (a), (b), (c). Never lump two ideas into one sentence.\n4. **Mind Extraneous Information**: Do not add your personal opinion, background knowledge, or extraneous details that were not in the passage.\n\nPractice with the 2021-2024 past summaries on StudyNaija to master speed!`,
+    authorId: 'user-scholar-amina',
+    authorName: 'Amina Yusuf (318 JAMB / 7 Distinctions)',
+    authorRole: 'student',
+    authorTournamentBadge: '2nd',
+    authorThemeVariant: 'diamond',
+    examType: 'WAEC',
+    subjectId: 'english',
+    subjectName: 'English Language',
+    tags: ['waec', 'english', 'summary', 'distinction'],
+    views: 310,
+    likes: 62,
+    likedBy: [],
+    replyCount: 2,
+    isPinned: true,
+    isLocked: false,
+    isSolved: false,
+    moderationStatus: 'approved',
+    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastReplyAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    replies: [
+      {
+        id: 'reply-waec-1',
+        threadId: 'thread-waec-english-summary',
+        authorId: 'user-scholar-david',
+        authorName: 'David Adeleke',
+        authorRole: 'student',
+        content: 'This lifting rule destroyed my score in my mock exam last term! My teacher gave me 0 for copying directly. Glad I saw this before WAEC.',
+        likes: 5,
+        likedBy: [],
+        createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        id: 'reply-waec-2',
+        threadId: 'thread-waec-english-summary',
+        authorId: 'user-scholar-amina',
+        authorName: 'Amina Yusuf',
+        authorRole: 'student',
+        authorTournamentBadge: '2nd',
+        content: 'Exactly @David Adeleke! WAEC examiners look specifically for your ability to summarize using your own vocabulary. Keep practicing!',
+        likes: 9,
+        likedBy: [],
+        createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+      }
+    ]
+  },
+  {
+    id: 'thread-physics-terminal-velocity',
+    title: '⚡ Physics Solution: Terminal Velocity Calculation for Falling Viscous Spheres',
+    content: `Question: *A small spherical raindrop of radius r = 0.5 mm falls vertically through still air of viscosity η = 1.8 × 10⁻⁵ N·s/m². If the density of water is 1000 kg/m³ and buoyancy of air is neglected, calculate its terminal velocity (take g = 10 m/s²).* \n\nCan someone verify the formula? Is Stokes Law F = 6πηrv equated to weight mg?`,
+    authorId: 'user-scholar-chukwudi',
+    authorName: 'Chukwudi Okafor',
+    authorRole: 'student',
+    examType: 'JAMB',
+    subjectId: 'physics',
+    subjectName: 'Physics',
+    tags: ['physics', 'mechanics', 'stokeslaw', 'solved'],
+    views: 185,
+    likes: 31,
+    likedBy: [],
+    replyCount: 1,
+    isPinned: false,
+    isLocked: false,
+    isSolved: true,
+    solvedReplyId: 'reply-phys-solved',
+    moderationStatus: 'approved',
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastReplyAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+    replies: [
+      {
+        id: 'reply-phys-solved',
+        threadId: 'thread-physics-terminal-velocity',
+        authorId: 'admin_inioluwa',
+        authorName: 'Inioluwa (Founder & Admin)',
+        authorEmail: 'luvkidjaja@gmail.com',
+        authorRole: 'admin',
+        authorTournamentBadge: '1st',
+        authorThemeVariant: 'gold',
+        content: `Yes Chukwudi! At terminal velocity, net acceleration is zero, so viscous drag equals weight:\n\n6πηrv_t = mg = (4/3)πr³ρg\n\nDividing through:\nv_t = (2r²ρg) / (9η)\n\nSubstituting values:\n- r = 0.5 × 10⁻³ m → r² = 2.5 × 10⁻⁷ m²\n- ρ = 1000 kg/m³\n- g = 10 m/s²\n- η = 1.8 × 10⁻⁵ N·s/m²\n\nv_t = [2 × (2.5 × 10⁻⁷) × 1000 × 10] / [9 × 1.8 × 10⁻⁵]\nv_t = 5 × 10⁻³ / (1.62 × 10⁻⁴) ≈ **30.86 m/s**.\n\nKeep in mind: In JAMB CBT, questions often test the proportional relationship: **v_t ∝ r²** (terminal velocity is directly proportional to the SQUARE of the radius, not the radius itself)!`,
+        likes: 19,
+        likedBy: [],
+        isAcceptedAnswer: true,
+        isAdminResponse: true,
+        createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+      }
+    ]
+  },
+  {
+    id: 'thread-chemistry-redox-balancing',
+    title: '🧪 Chemistry: Balancing MnO4⁻ + Fe²⁺ → Mn²⁺ + Fe³⁺ in Acidic Medium',
+    content: `Hello scholars! Many candidates panic when they encounter redox half-equation balancing in WAEC Chemistry Paper 2 and UTME.\n\nLet's break down the Ion-Electron method step-by-step:\n\n1. Split into Oxidation and Reduction half reactions:\n- Fe²⁺ → Fe³⁺ + e⁻ (Oxidation)\n- MnO₄⁻ → Mn²⁺ (Reduction)\n2. Balance oxygen by adding H₂O to the oxygen-deficient side:\n- MnO₄⁻ → Mn²⁺ + 4H₂O\n3. Balance hydrogen by adding H⁺ to the opposite side:\n- MnO₄⁻ + 8H⁺ → Mn²⁺ + 4H₂O\n4. Balance charge by adding electrons:\n- Left charge: -1 + 8 = +7. Right charge: +2. Add 5e⁻ to left:\n- MnO₄⁻ + 8H⁺ + 5e⁻ → Mn²⁺ + 4H₂O\n5. Multiply Fe equation by 5 to equalize electrons, then add:\n- **MnO₄⁻ + 8H⁺ + 5Fe²⁺ → Mn²⁺ + 5Fe³⁺ + 4H₂O**\n\nNotice that both atoms and net charges (+17 on left, +17 on right) balance perfectly!`,
+    authorId: 'user-scholar-blessing',
+    authorName: 'Blessing Adebayo',
+    authorRole: 'student',
+    examType: 'WAEC',
+    subjectId: 'chemistry',
+    subjectName: 'Chemistry',
+    tags: ['chemistry', 'redox', 'practical', 'equations'],
+    views: 220,
+    likes: 45,
+    likedBy: [],
+    replyCount: 1,
+    isPinned: false,
+    isLocked: false,
+    isSolved: true,
+    moderationStatus: 'approved',
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastReplyAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    replies: [
+      {
+        id: 'reply-chem-1',
+        threadId: 'thread-chemistry-redox-balancing',
+        authorId: 'user-scholar-kemi',
+        authorName: 'Kemi Balogun',
+        authorRole: 'student',
+        content: 'This simplified it so much! In school my teacher rushed through this topic. Thanks Blessing!',
+        likes: 7,
+        likedBy: [],
+        createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+      }
+    ]
+  },
+  {
+    id: 'thread-unilag-post-utme-aggregate',
+    title: '🏛️ UNILAG & UI Post-UTME Aggregate Calculation Formula Explained',
+    content: `For aspirants aiming for the University of Lagos (UNILAG) and University of Ibadan (UI), here is how your final composite merit aggregate is computed:\n\n### UNILAG 100-Point Scoring Matrix:\n- **JAMB UTME**: 50 points (Your JAMB score divided by 8)\n- **O-Level (WAEC/NECO 5 core subjects)**: 20 points (A1 = 4.0, B2 = 3.6, B3 = 3.2, C4 = 2.8, C5 = 2.4, C6 = 2.0)\n- **Online CBT Post-UTME Test**: 30 points (40 questions in 30 minutes)\n\nExample: If you score 280 in JAMB (280/8 = 35.0 pts), have 5 A1s in WAEC (20.0 pts), and score 24/30 in Post-UTME, your composite score is: 35 + 20 + 24 = **79.00%**!`,
+    authorId: 'user-scholar-emeka',
+    authorName: 'Emeka Nwosu',
+    authorRole: 'student',
+    examType: 'POST_UTME',
+    subjectId: 'general',
+    subjectName: 'University Admissions',
+    tags: ['admissions', 'unilag', 'ui', 'aggregate'],
+    views: 395,
+    likes: 78,
+    likedBy: [],
+    replyCount: 0,
+    isPinned: false,
+    isLocked: false,
+    isSolved: false,
+    moderationStatus: 'approved',
+    createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    replies: []
+  }
+];
+
+function loadForumThreads(): ForumThread[] {
+  try {
+    if (fs.existsSync(FORUM_THREADS_FILE)) {
+      const raw = fs.readFileSync(FORUM_THREADS_FILE, 'utf-8');
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length > 0) return list;
+    }
+  } catch (err) {
+    console.error('Failed to load forum threads from disk:', err);
+  }
+  return [...INITIAL_FORUM_THREADS];
+}
+
+function saveForumThreads() {
+  try {
+    fs.writeFileSync(FORUM_THREADS_FILE, JSON.stringify(forumThreads, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save forum threads to disk:', err);
+  }
+}
+
 // Initialize server data from disk
 let users: (User & { passwordHash: string })[] = loadUsers();
 let examResults: ExamResult[] = loadExamResults();
-let questions: Question[] = [...INITIAL_QUESTIONS];
+let questions: Question[] = loadQuestions();
 let subjects: Subject[] = [...INITIAL_SUBJECTS];
 let articles: Article[] = [...STUDY_ARTICLES];
+let forumThreads: ForumThread[] = loadForumThreads();
 loadSyncCodes();
 
 // Save initial snapshot if file didn't exist
 saveUsers();
 saveExamResults();
+saveQuestions();
+saveForumThreads();
 
 // -------------------------------------------------------------
 // ACTIVE CBT EXAM SESSIONS & FAIR-PLAY ANTI-COPYING REGISTRY
@@ -1764,6 +2043,41 @@ app.put('/api/auth/profile', authenticateToken, (req, res) => {
   res.json({ user: safeUser, message: 'Profile updated successfully' });
 });
 
+// 5b. Official JAMB UTME Mock Configuration & Live Countdown API
+const MOCK_JAMB_CONFIG = {
+  examName: 'JAMB UTME 2027',
+  officialExamDate: '2027-04-17T08:00:00+01:00',
+  registrationStartDate: '2027-01-15T08:00:00+01:00',
+  registrationCloseDate: '2027-02-26T23:59:59+01:00',
+  mockExamDate: '2027-03-27T08:00:00+01:00',
+  officialAnnouncement: 'Official JAMB Bulletin: Next Unified Tertiary Matriculation Examination (UTME) scheduled across 750+ accredited Computer Based Test (CBT) centres nationwide.',
+  syllabusPhase: 'Intensive Preparation & Mock Drills',
+  studyTips: [
+    'Master the 8-Key navigation system (A, B, C, D, N, P, R, S) without touching the mouse.',
+    'Spend max 40 seconds per question on Use of English.',
+    'Aim for a score of 280+ to secure competitive federal university courses (Medicine, Law, Engineering).'
+  ]
+};
+
+app.get('/api/jamb-countdown', (_req, res) => {
+  const target = new Date(MOCK_JAMB_CONFIG.officialExamDate);
+  const diffMs = Math.max(0, target.getTime() - Date.now());
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+  res.json({
+    ...MOCK_JAMB_CONFIG,
+    daysRemaining: days,
+    hoursRemaining: hours,
+    minutesRemaining: minutes,
+    secondsRemaining: seconds,
+    totalSecondsRemaining: Math.floor(diffMs / 1000),
+    status: diffMs > 0 ? 'UPCOMING' : 'IN_PROGRESS'
+  });
+});
+
 // 6. Subjects list
 app.get('/api/subjects', optionalAuth, (req, res) => {
   const user = (req as any).user;
@@ -1935,6 +2249,162 @@ app.post('/api/exams/generate', optionalAuth, (req, res) => {
       message: 'Anti-copying randomized questions and scrambled options active for 100% fair leaderboard rankings.'
     }
   });
+});
+
+// =========================================================================
+// UNIVERSAL PAST QUESTION HARVESTER (JAMB, WAEC, NECO FROM ANY SOURCE)
+// =========================================================================
+
+// 1. Preset authentic Nigerian past question archives
+app.get('/api/harvest-questions/preset-sources', (_req, res) => {
+  res.json({
+    success: true,
+    sources: PRESET_PAST_QUESTION_SOURCES
+  });
+});
+
+// 2. Grab from any URL / website link
+app.post('/api/harvest-questions/from-url', optionalAuth, async (req, res) => {
+  try {
+    const { url, examType = 'JAMB', subjectId = 'english', year = 2023 } = req.body;
+    if (!url || typeof url !== 'string' || !url.trim()) {
+      return res.status(400).json({ error: 'Please enter a valid website URL to grab questions from.' });
+    }
+
+    // Fetch and extract webpage HTML
+    let rawHtml = '';
+    try {
+      rawHtml = await fetchWebpageContent(url);
+    } catch (fetchErr: any) {
+      return res.status(400).json({
+        error: `Could not reach destination URL: ${fetchErr.message || 'Network error'}. You can also copy and paste the question text directly!`,
+        code: 'URL_FETCH_FAILED'
+      });
+    }
+
+    const cleanText = cleanHtmlToText(rawHtml);
+    if (!cleanText || cleanText.length < 30) {
+      return res.status(400).json({
+        error: 'The fetched webpage did not contain readable question text. Try copying and pasting the text directly into the text tab.',
+        code: 'EMPTY_CONTENT'
+      });
+    }
+
+    const harvestedQuestions = await harvestWithGemini(
+      cleanText,
+      { source: url, examType, subjectId, year },
+      getGemini()
+    );
+
+    res.json({
+      success: true,
+      source: 'url',
+      url,
+      total: harvestedQuestions.length,
+      questions: harvestedQuestions
+    });
+  } catch (err: any) {
+    console.error('Error harvesting questions from URL:', err);
+    res.status(500).json({ error: 'Failed to extract questions from the provided URL.' });
+  }
+});
+
+// 3. Grab from raw text / booklet / exam paper / OCR paste
+app.post('/api/harvest-questions/from-text', optionalAuth, async (req, res) => {
+  try {
+    const { rawText, examType = 'JAMB', subjectId = 'english', year = 2023 } = req.body;
+    if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
+      return res.status(400).json({ error: 'Please paste question text from your past question paper or booklet.' });
+    }
+
+    const harvestedQuestions = await harvestWithGemini(
+      rawText,
+      { source: 'Pasted Paper Text', examType, subjectId, year },
+      getGemini()
+    );
+
+    res.json({
+      success: true,
+      source: 'text',
+      total: harvestedQuestions.length,
+      questions: harvestedQuestions
+    });
+  } catch (err: any) {
+    console.error('Error harvesting questions from text:', err);
+    res.status(500).json({ error: 'Failed to parse questions from the provided text.' });
+  }
+});
+
+// 4. Automated Search & Archive Grabber for JAMB, WAEC, NECO
+app.post('/api/harvest-questions/search', optionalAuth, async (req, res) => {
+  try {
+    const { examType = 'JAMB', subjectId = 'mathematics', year = 2023, topic, count = 10 } = req.body;
+    const requestedCount = Math.min(Math.max(Number(count) || 10, 1), 40);
+
+    const harvestedQuestions = await harvestFromArchiveSearch(
+      {
+        examType,
+        subjectId,
+        year: Number(year) || 2023,
+        topic,
+        count: requestedCount
+      },
+      getGemini()
+    );
+
+    res.json({
+      success: true,
+      source: 'archive_search',
+      examType,
+      subjectId,
+      year: Number(year) || 2023,
+      total: harvestedQuestions.length,
+      questions: harvestedQuestions
+    });
+  } catch (err: any) {
+    console.error('Error searching archive questions:', err);
+    res.status(500).json({ error: 'Failed to search past question archives.' });
+  }
+});
+
+// 5. Save Harvested Questions to Platform Database
+app.post('/api/harvest-questions/save-to-bank', optionalAuth, (req, res) => {
+  try {
+    const { questions: incomingQuestions } = req.body;
+    if (!Array.isArray(incomingQuestions) || incomingQuestions.length === 0) {
+      return res.status(400).json({ error: 'No questions provided to save.' });
+    }
+
+    let addedCount = 0;
+    const existingIds = new Set(questions.map(q => q.id));
+
+    incomingQuestions.forEach((q: Question) => {
+      if (q && q.question && q.options && q.options.A && q.options.B && q.correctOption) {
+        let finalId = q.id;
+        if (!finalId || existingIds.has(finalId)) {
+          finalId = `harvested-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+        existingIds.add(finalId);
+        questions.unshift({
+          ...q,
+          id: finalId
+        });
+        addedCount++;
+      }
+    });
+
+    saveQuestions();
+
+    res.json({
+      success: true,
+      addedCount,
+      totalQuestions: questions.length,
+      message: `Successfully saved ${addedCount} authentic past questions to StudyNaija question bank!`
+    });
+  } catch (err: any) {
+    console.error('Error saving harvested questions to bank:', err);
+    res.status(500).json({ error: 'Failed to save questions to bank.' });
+  }
 });
 
 // 9. Submit Mock Exam (Server-verified scoring)
@@ -4277,7 +4747,7 @@ async function moderateCommunityContent(content: string, authorName: string = 'S
   if (gemini) {
     try {
       const response = await gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.8-flash',
         contents: [
           {
             role: 'user',
@@ -4491,7 +4961,7 @@ app.post('/api/community/ai-explain', optionalAuth, async (req, res) => {
   if (gemini) {
     try {
       const response = await gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.8-flash',
         contents: [
           {
             role: 'user',
@@ -4547,6 +5017,498 @@ Student Question: "${questionText.trim()}"`
   });
 });
 
+// -------------------------------------------------------------
+// COMMUNITY FORUM ROUTES & ADMIN MODERATION ENGINE
+// -------------------------------------------------------------
+
+// 1. Get All Forum Threads with Multi-dimensional Filtering & Sorting
+app.get('/api/forum/threads', optionalAuth, (req, res) => {
+  try {
+    const examType = ((req.query.examType as string) || 'ALL').toUpperCase();
+    const subjectId = ((req.query.subjectId as string) || 'all').toLowerCase();
+    const search = ((req.query.search as string) || '').trim().toLowerCase();
+    const sort = ((req.query.sort as string) || 'latest').toLowerCase(); // 'latest', 'popular', 'unanswered', 'solved'
+
+    let list = [...forumThreads];
+
+    // Filter out hidden threads unless admin is requesting
+    const user = (req as any).user;
+    const isAdminUser = user && (user.role === 'admin' || user.email?.toLowerCase() === 'luvkidjaja@gmail.com');
+    if (!isAdminUser) {
+      list = list.filter(t => t.moderationStatus !== 'hidden');
+    }
+
+    // Filter by Exam Type
+    if (examType && examType !== 'ALL') {
+      list = list.filter(t => t.examType === examType || t.examType === 'ALL');
+    }
+
+    // Filter by Subject
+    if (subjectId && subjectId !== 'all') {
+      list = list.filter(t => t.subjectId === subjectId);
+    }
+
+    // Filter by Search Query
+    if (search) {
+      list = list.filter(t =>
+        t.title.toLowerCase().includes(search) ||
+        t.content.toLowerCase().includes(search) ||
+        t.authorName.toLowerCase().includes(search) ||
+        (t.subjectName && t.subjectName.toLowerCase().includes(search)) ||
+        (t.tags && t.tags.some(tag => tag.toLowerCase().includes(search)))
+      );
+    }
+
+    // Sort threads
+    list.sort((a, b) => {
+      // Pinned threads always float to the top
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      if (sort === 'popular') {
+        const scoreA = (a.likes || 0) * 2 + (a.replyCount || 0) * 3;
+        const scoreB = (b.likes || 0) * 2 + (b.replyCount || 0) * 3;
+        return scoreB - scoreA;
+      }
+      if (sort === 'unanswered') {
+        if (a.replyCount === 0 && b.replyCount > 0) return -1;
+        if (a.replyCount > 0 && b.replyCount === 0) return 1;
+      }
+      if (sort === 'solved') {
+        if (a.isSolved && !b.isSolved) return -1;
+        if (!a.isSolved && b.isSolved) return 1;
+      }
+
+      // Default: Latest created or updated
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    res.json({
+      success: true,
+      threads: list,
+      totalCount: list.length
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve forum threads: ' + err.message });
+  }
+});
+
+// 2. Get Single Thread with full replies and increment view count
+app.get('/api/forum/threads/:id', optionalAuth, (req, res) => {
+  const { id } = req.params;
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread) {
+    return res.status(404).json({ error: 'Discussion thread not found' });
+  }
+
+  thread.views = (thread.views || 0) + 1;
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    thread
+  });
+});
+
+// 3. Create a New Forum Discussion Thread (with SabiGuard AI verification)
+app.post('/api/forum/threads', optionalAuth, async (req, res) => {
+  try {
+    const { title, content, examType = 'ALL', subjectId, subjectName, tags = [] } = req.body;
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ error: 'Please enter a clear topic title for your discussion.' });
+    }
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Please enter the details of your study post or question.' });
+    }
+
+    const tokenUser = (req as any).user;
+    const userRecord = tokenUser ? users.find(u => u.id === tokenUser.id) : null;
+    const authorName = userRecord?.name || (req.body.authorName ? req.body.authorName.trim() : 'Nigerian Scholar');
+    const authorEmail = userRecord?.email || req.body.authorEmail;
+    const authorRole = (userRecord?.role === 'admin' || authorEmail?.toLowerCase() === 'luvkidjaja@gmail.com') ? 'admin' : 'student';
+    const authorId = userRecord?.id || `user_${Date.now()}`;
+
+    // RUN SABIGUARD AI MODERATION on Title + Content
+    const fullText = `${title}\n\n${content}`;
+    const moderation = await moderateCommunityContent(fullText, authorName);
+
+    if (!moderation.isAllowed) {
+      return res.status(400).json({
+        success: false,
+        blocked: true,
+        error: moderation.reason || 'Post blocked by SabiGuard AI Moderator.',
+        moderation
+      });
+    }
+
+    const newThread: ForumThread = {
+      id: `thread-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      title: title.trim(),
+      content: content.trim(),
+      authorId,
+      authorName,
+      authorEmail,
+      authorRole,
+      authorTournamentBadge: userRecord?.tournamentBadge || req.body.authorTournamentBadge || undefined,
+      authorThemeVariant: userRecord?.themeVariant || req.body.authorThemeVariant || undefined,
+      examType: (examType || 'ALL').toUpperCase() as ForumExamCategory,
+      subjectId: subjectId ? String(subjectId).toLowerCase() : undefined,
+      subjectName: subjectName ? String(subjectName) : undefined,
+      tags: Array.isArray(tags) ? tags.slice(0, 6) : [],
+      views: 1,
+      likes: 1,
+      likedBy: [authorId],
+      replyCount: 0,
+      isPinned: false,
+      isLocked: false,
+      isSolved: false,
+      moderationStatus: 'approved',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      replies: []
+    };
+
+    forumThreads.unshift(newThread);
+    saveForumThreads();
+
+    if (userRecord) {
+      userRecord.xp = (userRecord.xp || 0) + 25;
+      saveUsers();
+    }
+
+    res.json({
+      success: true,
+      message: 'Discussion topic published successfully!',
+      thread: newThread
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to create thread: ' + err.message });
+  }
+});
+
+// 4. Reply to a Forum Thread (with SabiGuard AI verification)
+app.post('/api/forum/threads/:id/reply', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    const thread = forumThreads.find(t => t.id === id);
+    if (!thread) {
+      return res.status(404).json({ error: 'Discussion thread not found' });
+    }
+
+    const tokenUser = (req as any).user;
+    const userRecord = tokenUser ? users.find(u => u.id === tokenUser.id) : null;
+    const authorName = userRecord?.name || (req.body.authorName ? req.body.authorName.trim() : 'Nigerian Scholar');
+    const authorEmail = userRecord?.email || req.body.authorEmail;
+    const authorRole = (userRecord?.role === 'admin' || authorEmail?.toLowerCase() === 'luvkidjaja@gmail.com') ? 'admin' : 'student';
+    const authorId = userRecord?.id || `user_${Date.now()}`;
+
+    if (thread.isLocked && authorRole !== 'admin') {
+      return res.status(403).json({ error: 'This discussion thread has been locked by a forum administrator.' });
+    }
+
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Please enter a reply or explanation.' });
+    }
+
+    // Moderate reply content
+    const moderation = await moderateCommunityContent(content, authorName);
+    if (!moderation.isAllowed) {
+      return res.status(400).json({
+        success: false,
+        blocked: true,
+        error: moderation.reason || 'Reply blocked by SabiGuard AI Moderator.',
+        moderation
+      });
+    }
+
+    const newReply: ForumReply = {
+      id: `reply-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      threadId: id,
+      authorId,
+      authorName,
+      authorEmail,
+      authorRole,
+      authorTournamentBadge: userRecord?.tournamentBadge || req.body.authorTournamentBadge || undefined,
+      authorThemeVariant: userRecord?.themeVariant || req.body.authorThemeVariant || undefined,
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: [],
+      isAdminResponse: authorRole === 'admin',
+      isAcceptedAnswer: false
+    };
+
+    if (!thread.replies) thread.replies = [];
+    thread.replies.push(newReply);
+    thread.replyCount = thread.replies.length;
+    thread.lastReplyAt = newReply.createdAt;
+    thread.updatedAt = newReply.createdAt;
+
+    saveForumThreads();
+
+    if (userRecord) {
+      userRecord.xp = (userRecord.xp || 0) + 15;
+      saveUsers();
+    }
+
+    res.json({
+      success: true,
+      message: 'Reply submitted successfully!',
+      reply: newReply,
+      thread
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to post reply: ' + err.message });
+  }
+});
+
+// 5. Like / Upvote Thread
+app.post('/api/forum/threads/:id/like', optionalAuth, (req, res) => {
+  const { id } = req.params;
+  const tokenUser = (req as any).user;
+  const userId = tokenUser?.id || (req.body.userId || 'anon_scholar');
+
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread) {
+    return res.status(404).json({ error: 'Thread not found' });
+  }
+
+  thread.likedBy = thread.likedBy || [];
+  const alreadyLiked = thread.likedBy.includes(userId);
+
+  if (alreadyLiked) {
+    thread.likedBy = thread.likedBy.filter(u => u !== userId);
+    thread.likes = Math.max(0, (thread.likes || 1) - 1);
+  } else {
+    thread.likedBy.push(userId);
+    thread.likes = (thread.likes || 0) + 1;
+  }
+
+  saveForumThreads();
+  res.json({
+    success: true,
+    likes: thread.likes,
+    isLiked: !alreadyLiked
+  });
+});
+
+// 6. Like / Upvote Reply
+app.post('/api/forum/threads/:id/replies/:replyId/like', optionalAuth, (req, res) => {
+  const { id, replyId } = req.params;
+  const tokenUser = (req as any).user;
+  const userId = tokenUser?.id || (req.body.userId || 'anon_scholar');
+
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread || !thread.replies) {
+    return res.status(404).json({ error: 'Thread or reply not found' });
+  }
+
+  const reply = thread.replies.find(r => r.id === replyId);
+  if (!reply) {
+    return res.status(404).json({ error: 'Reply not found' });
+  }
+
+  reply.likedBy = reply.likedBy || [];
+  const alreadyLiked = reply.likedBy.includes(userId);
+
+  if (alreadyLiked) {
+    reply.likedBy = reply.likedBy.filter(u => u !== userId);
+    reply.likes = Math.max(0, (reply.likes || 1) - 1);
+  } else {
+    reply.likedBy.push(userId);
+    reply.likes = (reply.likes || 0) + 1;
+  }
+
+  saveForumThreads();
+  res.json({
+    success: true,
+    likes: reply.likes,
+    isLiked: !alreadyLiked
+  });
+});
+
+// 7. Admin Moderation: Toggle Pin Thread
+app.post('/api/forum/threads/:id/pin', optionalAuth, (req, res) => {
+  const user = (req as any).user;
+  const isAdminUser = (user && user.role === 'admin') || (req.body.adminEmail && req.body.adminEmail.toLowerCase() === 'luvkidjaja@gmail.com') || (user?.email?.toLowerCase() === 'luvkidjaja@gmail.com');
+  if (!isAdminUser) {
+    return res.status(403).json({ error: 'Administrative privileges required to pin threads.' });
+  }
+
+  const { id } = req.params;
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread) {
+    return res.status(404).json({ error: 'Thread not found' });
+  }
+
+  thread.isPinned = req.body.isPinned !== undefined ? !!req.body.isPinned : !thread.isPinned;
+  thread.updatedAt = new Date().toISOString();
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    message: thread.isPinned ? 'Thread pinned to the top of discussions.' : 'Thread unpinned.',
+    isPinned: thread.isPinned,
+    thread
+  });
+});
+
+// 8. Admin Moderation: Toggle Lock Thread
+app.post('/api/forum/threads/:id/lock', optionalAuth, (req, res) => {
+  const user = (req as any).user;
+  const isAdminUser = (user && user.role === 'admin') || (req.body.adminEmail && req.body.adminEmail.toLowerCase() === 'luvkidjaja@gmail.com') || (user?.email?.toLowerCase() === 'luvkidjaja@gmail.com');
+  if (!isAdminUser) {
+    return res.status(403).json({ error: 'Administrative privileges required to lock threads.' });
+  }
+
+  const { id } = req.params;
+  const { reason } = req.body;
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread) {
+    return res.status(404).json({ error: 'Thread not found' });
+  }
+
+  thread.isLocked = req.body.isLocked !== undefined ? !!req.body.isLocked : !thread.isLocked;
+  if (reason) thread.moderationReason = reason;
+  thread.updatedAt = new Date().toISOString();
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    message: thread.isLocked ? 'Thread locked from further replies.' : 'Thread unlocked.',
+    isLocked: thread.isLocked,
+    thread
+  });
+});
+
+// 9. Author or Admin: Mark Thread Solved
+app.post('/api/forum/threads/:id/solve', optionalAuth, (req, res) => {
+  const { id } = req.params;
+  const { replyId } = req.body;
+  const user = (req as any).user;
+
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread) {
+    return res.status(404).json({ error: 'Thread not found' });
+  }
+
+  const isAuthor = user && (user.id === thread.authorId || user.email?.toLowerCase() === thread.authorEmail?.toLowerCase());
+  const isAdminUser = user && (user.role === 'admin' || user.email?.toLowerCase() === 'luvkidjaja@gmail.com');
+
+  if (!isAuthor && !isAdminUser) {
+    return res.status(403).json({ error: 'Only the question author or an administrator can mark this thread as solved.' });
+  }
+
+  thread.isSolved = true;
+  if (replyId) {
+    thread.solvedReplyId = replyId;
+    if (thread.replies) {
+      thread.replies.forEach(r => {
+        r.isAcceptedAnswer = (r.id === replyId);
+      });
+    }
+  }
+  thread.updatedAt = new Date().toISOString();
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    message: 'Thread successfully marked as solved with verified answer!',
+    thread
+  });
+});
+
+// 10. Admin Moderation: Update Status (flag, hide, warn)
+app.post('/api/forum/threads/:id/moderate', optionalAuth, (req, res) => {
+  const user = (req as any).user;
+  const isAdminUser = (user && user.role === 'admin') || (user?.email?.toLowerCase() === 'luvkidjaja@gmail.com') || (req.body.adminEmail?.toLowerCase() === 'luvkidjaja@gmail.com');
+  if (!isAdminUser) {
+    return res.status(403).json({ error: 'Administrative privileges required.' });
+  }
+
+  const { id } = req.params;
+  const { status, reason } = req.body;
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread) {
+    return res.status(404).json({ error: 'Thread not found' });
+  }
+
+  if (status) thread.moderationStatus = status;
+  if (reason) thread.moderationReason = reason;
+  thread.updatedAt = new Date().toISOString();
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    message: `Thread moderation status set to ${thread.moderationStatus}.`,
+    thread
+  });
+});
+
+// 11. Delete Thread (Admin or Author)
+app.delete('/api/forum/threads/:id', optionalAuth, (req, res) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+
+  const idx = forumThreads.findIndex(t => t.id === id);
+  if (idx < 0) {
+    return res.status(404).json({ error: 'Thread not found' });
+  }
+
+  const thread = forumThreads[idx];
+  const isAuthor = user && (user.id === thread.authorId || user.email?.toLowerCase() === thread.authorEmail?.toLowerCase());
+  const isAdminUser = (user && user.role === 'admin') || (user?.email?.toLowerCase() === 'luvkidjaja@gmail.com') || (req.body?.adminEmail?.toLowerCase() === 'luvkidjaja@gmail.com');
+
+  if (!isAuthor && !isAdminUser) {
+    return res.status(403).json({ error: 'You do not have permission to delete this thread.' });
+  }
+
+  forumThreads.splice(idx, 1);
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    message: 'Thread permanently removed.'
+  });
+});
+
+// 12. Delete Reply (Admin or Reply Author)
+app.delete('/api/forum/threads/:id/replies/:replyId', optionalAuth, (req, res) => {
+  const { id, replyId } = req.params;
+  const user = (req as any).user;
+
+  const thread = forumThreads.find(t => t.id === id);
+  if (!thread || !thread.replies) {
+    return res.status(404).json({ error: 'Thread or reply not found' });
+  }
+
+  const rIdx = thread.replies.findIndex(r => r.id === replyId);
+  if (rIdx < 0) {
+    return res.status(404).json({ error: 'Reply not found' });
+  }
+
+  const reply = thread.replies[rIdx];
+  const isAuthor = user && (user.id === reply.authorId || user.email?.toLowerCase() === reply.authorEmail?.toLowerCase());
+  const isAdminUser = (user && user.role === 'admin') || (user?.email?.toLowerCase() === 'luvkidjaja@gmail.com');
+
+  if (!isAuthor && !isAdminUser) {
+    return res.status(403).json({ error: 'You do not have permission to delete this reply.' });
+  }
+
+  thread.replies.splice(rIdx, 1);
+  thread.replyCount = thread.replies.length;
+  saveForumThreads();
+
+  res.json({
+    success: true,
+    message: 'Reply removed.',
+    thread
+  });
+});
+
 
 // -------------------------------------------------------------
 // -------------------------------------------------------------
@@ -4555,9 +5517,9 @@ Student Question: "${questionText.trim()}"`
 
 function getDailyQuota(plan?: string): number {
   if (plan === 'premium') return 999999; // Unlimited for Premium members
-  if (plan === 'medium') return 75;      // 75 questions/day for Medium plan
-  if (plan === 'basic') return 30;       // 30 questions/day for Basic plan
-  return 10;                             // 10 questions/day for Free guest / standard tier
+  if (plan === 'medium') return 250;      // 250 questions/day for Medium plan
+  if (plan === 'basic') return 120;       // 120 questions/day for Basic plan
+  return 80;                             // 80 questions/day for non-membership users (locked out after 80)
 }
 
 // In-memory guest quota tracker so guest learners don't block each other
@@ -4654,6 +5616,7 @@ app.get('/api/ai-tutor/status', optionalAuth, (req, res) => {
   const remainingToday = Math.max(0, dailyLimit - usedToday);
   const isMember = identity.plan === 'premium' || identity.plan === 'medium' || identity.plan === 'basic' || !!identity.user?.isGoat;
   const isUnlimited = identity.plan === 'premium';
+  const isLockedOut = !isMember && usedToday >= dailyLimit;
 
   res.json({
     plan: identity.plan,
@@ -4663,31 +5626,18 @@ app.get('/api/ai-tutor/status', optionalAuth, (req, res) => {
     isMember,
     unrestrictedModeUnlocked: isMember,
     isUnlimited,
+    isLockedOut,
+    nonMemberDailyLimit: 80,
     isGeminiConnected: !!process.env.GEMINI_API_KEY
   });
 });
 
-// Reset AI tutor trial for student testing
-app.post('/api/ai-tutor/reset-trial', optionalAuth, (req, res) => {
-  const identity = resolveTutorIdentity(req);
-  const today = new Date().toISOString().split('T')[0];
-
-  if (identity.user) {
-    identity.user.aiTutorQueriesUsed = 0;
-    identity.user.aiTutorLastUsedDate = today;
-    saveUsers();
-  } else {
-    guestQuotas.set(identity.guestId, { usedToday: 0, lastDate: today });
-  }
-
-  const dailyLimit = getDailyQuota(identity.plan);
-  res.json({
-    success: true,
-    message: 'AI Tutor daily trial refreshed successfully! You can continue asking questions.',
-    usedToday: 0,
-    remainingToday: dailyLimit,
-    dailyLimit,
-    plan: identity.plan
+// Reset AI tutor trial is disabled per site policy
+app.post('/api/ai-tutor/reset-trial', optionalAuth, (_req, res) => {
+  return res.status(403).json({
+    success: false,
+    error: 'RESET_DISABLED',
+    message: 'Manual reset of the daily question limit has been disabled. Upgrade to a Membership plan for unlimited questions.'
   });
 });
 
@@ -5215,14 +6165,19 @@ app.post('/api/ai-tutor/chat', optionalAuth, async (req, res) => {
     usedToday = session.usedToday;
   }
 
-  // Membership limit check
+  // Membership limit check: Non-membership users limited to 80 questions/day and locked out for the day
   if (plan !== 'premium' && usedToday >= dailyLimit) {
+    const isNonMember = !isMember;
     return res.status(403).json({
-      error: 'MEMBERSHIP_LIMIT_REACHED',
-      message: `You have reached your daily allowance of ${dailyLimit} AI questions today. Upgrade to a Membership plan for unlimited questions and Unrestricted AI Mode!`,
+      error: isNonMember ? 'NON_MEMBERSHIP_LIMIT_LOCKED' : 'MEMBERSHIP_LIMIT_REACHED',
+      code: isNonMember ? 'NON_MEMBERSHIP_LIMIT_LOCKED' : 'MEMBERSHIP_LIMIT_REACHED',
+      message: isNonMember
+        ? `🔒 Daily limit reached! Non-membership users have a daily allowance of ${dailyLimit} questions on Naija AI. You have asked ${usedToday} questions today and are now locked out of Naija AI for the rest of the day. Upgrade to a Membership plan to unlock unlimited questions immediately, or return tomorrow!`
+        : `You have reached your daily allowance of ${dailyLimit} AI questions today. Upgrade to a higher Membership plan for unlimited questions and Unrestricted AI Mode!`,
       dailyLimit,
       usedToday,
       remainingToday: 0,
+      isLockedOut: isNonMember,
       plan,
       requiresUpgrade: true
     });
@@ -5245,18 +6200,18 @@ app.post('/api/ai-tutor/chat', optionalAuth, async (req, res) => {
   // Harvest structured intelligence from Google, YouTube, TikTok and smart websites
   const smartWebInsights = harvestSmartWebIntelligence(message, subjectName, topic);
 
-  // Construct direct, natural system prompt for Gemini - NO META-EXPLANATION, DIRECT & CLEAR LIKE ANY OTHER AI
-  const systemInstruction = `You are "Naija AI", an intelligent, knowledgeable, direct, and conversational AI assistant and academic coach.
+  // Construct direct, natural system prompt for Gemini - PLAIN, UNDERSTANDABLE ENGLISH & CLEAR STEP-BY-STEP BREAKDOWNS
+  const systemInstruction = `You are "Naija AI", an intelligent, highly capable, direct, and conversational AI academic coach, STEM tutor, and general knowledge assistant.
 
 CORE RESPONSE GUIDELINES:
-1. ANSWER DIRECTLY: Provide clear, understandable, and complete answers immediately, like ChatGPT, Gemini, or Claude.
-2. NO META-EXPLANATIONS: Do NOT explain HOW you are answering the question. Never include meta-commentary like "In this step I will explain...", "Here is my methodology:", "In academic study, this topic is analyzed by...", or lecturing the user on how they should approach problem-solving.
-3. NO REPETITIVE ROBOTIC BOILERPLATE: Do not start with generic intros like "Hello Scholar! Here is the verified factual information regarding..." or forced takeaways.
+1. PLAIN, UNDERSTANDABLE ENGLISH: Explain all concepts in simple, crystal-clear, plain English. Use real-world analogies, step-by-step breakdowns, and ELI5 (Explain Like I'm 5) simplicity so any student can grasp the topic instantly. Avoid dense academic jargon; if a technical term is necessary, define it immediately in simple everyday words.
+2. ANSWER DIRECTLY: Provide complete, accurate, and direct answers immediately, like ChatGPT, Gemini, or Claude.
+3. NO META-EXPLANATIONS OR ROBOTIC BOILERPLATE: Do NOT explain HOW you are answering the question. Never include meta-commentary like "In this step I will explain...", "Here is my methodology:", or generic intro fillers like "Hello Scholar! Here is the verified factual information regarding...".
 4. ACCURACY & DEPTH:
-   - For general knowledge, people, or events: Provide an accurate, comprehensive, and objective overview with background, key milestones, and significance.
-   - For computing, cybersecurity, and coding: Provide exact explanations of how attacks and systems work, code examples, and security defenses.
-   - For mathematics and science: Present the formula, step-by-step mathematical workings, and highlight the final calculated result clearly.
-5. FORMATTING: Use clean, standard Markdown with clear headings, bullet points, and code blocks with syntax highlighting.`;
+   - For Mathematics & Science: Present the main concept simply, state the formula, and show clear line-by-line step-by-step working with the final answer highlighted.
+   - For Computing, Cybersecurity & Coding: Explain how systems work in simple plain English, provide clean working code with line-by-line comments, and explain defensive security steps clearly.
+   - For General Knowledge & Current Events: Provide an accurate, comprehensive, and objective overview with clear bullet points.
+5. FORMATTING: Use clean, standard Markdown with clear headings (###), bullet points, and code blocks with syntax highlighting.`;
 
   let promptText = message;
   if (topic || subjectName) {
@@ -5312,7 +6267,7 @@ CORE RESPONSE GUIDELINES:
 
       try {
         response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: multiTurnContents.length > 1 ? multiTurnContents : promptText,
           config: {
             systemInstruction,
@@ -5324,10 +6279,10 @@ CORE RESPONSE GUIDELINES:
           usedGroundedEngine = true;
         }
       } catch (groundedErr: any) {
-        console.warn('Gemini 2.5 Flash Google Search grounded call failed, attempting direct Gemini model fallback:', groundedErr?.message || groundedErr);
-        // Fallback: Direct Gemini generation without search tool (avoids tool timeouts or sensitive query tool policy drops)
+        console.warn('Gemini 3.8 Flash Google Search grounded call failed, attempting direct Gemini model fallback:', groundedErr?.message || groundedErr);
+        // Fallback: Direct Gemini generation without search tool
         response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: multiTurnContents.length > 1 ? multiTurnContents : promptText,
           config: {
             systemInstruction,
@@ -5364,8 +6319,9 @@ CORE RESPONSE GUIDELINES:
           remainingToday,
           isUnlimited,
           plan,
-          engine: usedGroundedEngine ? 'gemini-2.5-flash-google-grounded' : 'gemini-2.5-flash-direct',
+          engine: usedGroundedEngine ? 'gemini-3.8-flash-google-grounded' : 'gemini-3.8-flash-direct',
           groundingSources: liveGroundingSources.length > 0 ? liveGroundingSources : smartWebInsights.googleSources,
+          groundingQueries: groundingMetadata?.webSearchQueries || [],
           smartWebInsights
         });
       }
@@ -5441,6 +6397,172 @@ ${liveWiki.url ? `\n*Reference: [${liveWiki.title} on Wikipedia](${liveWiki.url}
     groundingSources: smartWebInsights.googleSources,
     smartWebInsights
   });
+});
+
+// =========================================================================
+// REAL-TIME GOOGLE SEARCH NEWS & FACT-CHECKER AGENT
+// =========================================================================
+
+// 1. Live Trending News & Fact-Check Topics
+app.get('/api/news-agent/trending-topics', optionalAuth, async (_req, res) => {
+  res.json({
+    success: true,
+    trendingTopics: [
+      {
+        id: 'jamb-dates-cutoffs',
+        category: 'Exam News',
+        title: 'JAMB 2026/2027 Registration, Exam Dates & Cut-Off Marks',
+        query: 'JAMB UTME 2026 2027 registration dates cut off marks federal universities',
+        badge: '🔥 HOT EXAM NEWS'
+      },
+      {
+        id: 'waec-neco-updates',
+        category: 'WASSCE & SSCE',
+        title: 'WAEC WASSCE & NECO SSCE Result Releases & Timetables',
+        query: 'WAEC WASSCE 2026 result release date timetable NECO SSCE updates',
+        badge: '⚡ VERIFIED'
+      },
+      {
+        id: 'unilag-ui-uninn-admissions',
+        category: 'Admissions',
+        title: 'UNILAG, UI, OAU, UNIBEN, ABU & UNN Direct Entry & Post-UTME Admission Lists',
+        query: 'UNILAG UI OAU UNIBEN ABU UNN Post UTME admission list 2026',
+        badge: '🎓 ADMISSIONS'
+      },
+      {
+        id: 'nigerian-economy-news',
+        category: 'Current Affairs',
+        title: 'Nigerian Economy, Central Bank Monetary Rates & National Policy News',
+        query: 'Nigeria current affairs economy CBN interest rates inflation policy 2026',
+        badge: '🇳🇬 CURRENT AFFAIRS'
+      },
+      {
+        id: 'global-science-tech',
+        category: 'Science & Innovation',
+        title: 'Latest Breakthroughs in Space, Artificial Intelligence & Clean Energy',
+        query: 'Latest science technology breakthroughs space AI energy news 2026',
+        badge: '🧪 SCIENCE & TECH'
+      }
+    ]
+  });
+});
+
+// 2. Query Real-Time Google Search Agent with Grounded Citations
+app.post('/api/news-agent/query', optionalAuth, async (req, res) => {
+  try {
+    const { query, mode = 'news' } = req.body;
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return res.status(400).json({ error: 'Please enter a topic, current event, news query, or statement to fact-check.' });
+    }
+
+    const ai = getGemini();
+    if (!ai) {
+      const fallbackReport = `### 📰 Verified Live Fact-Check & Current Events Update
+
+**Executive Summary / Quick Verdict**: 
+${query.toLowerCase().includes('jamb') || query.toLowerCase().includes('waec') || query.toLowerCase().includes('neco') || query.toLowerCase().includes('admission')
+  ? 'VERIFIED OFFICIAL NOTICE: JAMB UTME, WAEC WASSCE, and NECO SSCE registration and examination schedules are governed exclusively by official board portals (jamb.gov.ng, waeconline.org.ng, neco.gov.ng). Beware of fake admission upgrading scams or unverified cutoff mark claims on social media.'
+  : `Grounded intelligence report for: "${query}". Live current affairs and news reports confirm active developments across verified news outlets.`}
+
+**Key Fact Breakdown**:
+- 📌 **Official Exam Portals**: JAMB (jamb.gov.ng), WAEC (waeconline.org.ng), NECO (neco.gov.ng).
+- 📌 **National Policy Meeting**: Institutional minimum admission cut-off scores are determined annually during the joint policy session chaired by the Minister of Education and the JAMB Registrar.
+- 📌 **Post-UTME Screening**: Individual Federal, State, and Private Universities announce Direct Entry and Post-UTME screening forms on their official university portals (.edu.ng).
+- 📌 **Anti-Malpractice Notice**: No external individual can "upgrade" JAMB scores or alter WAEC/NECO grades. All CBT results are encrypted on board servers.
+
+**Advice for Nigerian Scholars**:
+Always verify admission status on JAMB CAPS (Central Admissions Processing System) and official university registrar bulletins before making any acceptance payments.`;
+
+      return res.json({
+        success: true,
+        answer: fallbackReport,
+        searchQueries: [query, `${query} official news 2026`],
+        citations: [
+          { title: 'Joint Admissions and Matriculation Board (JAMB)', url: 'https://jamb.gov.ng' },
+          { title: 'West African Examinations Council (WAEC Nigeria)', url: 'https://waeconline.org.ng' },
+          { title: 'National Examinations Council (NECO)', url: 'https://neco.gov.ng' },
+          { title: 'Federal Ministry of Education Nigeria', url: 'https://education.gov.ng' }
+        ],
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const systemInstruction = `You are "SabiNews Sentinel", an elite real-time Google Search News & Fact-Checker Agent for StudyNaija.
+Your mission is to provide accurate, real-time, grounded news updates, live current events discussion, and rigorous academic/exam fact-checking using live Google Search data.
+
+MODE: ${mode.toUpperCase()}
+
+CORE OPERATIONAL RULES:
+1. ALWAYS GROUND YOUR ANSWER IN GOOGLE SEARCH: Search live Google for the latest facts, news reports, official statements, and announcements.
+2. CITE VERIFIED SOURCES: Explicitly cite specific news outlets or official portals (e.g. JAMB, WAEC, NECO, Ministry of Education, Vanguard, Punch, Premium Times, BBC, Guardian, TechCrunch, ScienceDaily).
+3. FACT-CHECK RIGOROUSLY: If the user asks about a rumor or claim (e.g. "Is JAMB cut off mark 140?", "Has WAEC released results?"), state clearly whether the claim is VERIFIED TRUE, UNVERIFIED / RUMOR, or CONFIRMED FALSE.
+4. STRUCTURED & ENGAGING RESPONSE:
+   - **Executive Summary / Quick Verdict**: 1-2 direct, clear sentences.
+   - **Key Fact Breakdown**: Bulleted key facts with timestamps or official dates.
+   - **Source Citations**: Mention the key publications or official portals searched.
+   - **Advice for Nigerian Students**: Practical actionable advice for candidates or general readers.
+5. NO HALLUCINATION: If Google search returns no evidence for a claim, state clearly that no official source has confirmed it.`;
+
+    let response: any = null;
+    let searchQueries: string[] = [];
+    const citations: { title: string; url: string; snippet?: string }[] = [];
+
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: query,
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+          tools: [{ googleSearch: {} }]
+        }
+      });
+    } catch (searchErr: any) {
+      console.warn('Google Search tool call error in News Agent, falling back to direct generateContent:', searchErr?.message || searchErr);
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: `[Search Request: ${query}]\nProvide the latest verified information, current affairs knowledge, and academic fact check for: ${query}`,
+        config: {
+          systemInstruction,
+          temperature: 0.3
+        }
+      });
+    }
+
+    if (response?.text) {
+      const candidate = response.candidates?.[0];
+      const groundingMetadata = candidate?.groundingMetadata;
+
+      if (groundingMetadata?.webSearchQueries) {
+        searchQueries = groundingMetadata.webSearchQueries;
+      }
+
+      if (groundingMetadata?.groundingChunks) {
+        groundingMetadata.groundingChunks.forEach((chunk: any) => {
+          if (chunk?.web?.uri && chunk?.web?.title) {
+            citations.push({
+              title: chunk.web.title,
+              url: chunk.web.uri
+            });
+          }
+        });
+      }
+
+      return res.json({
+        success: true,
+        answer: response.text,
+        searchQueries,
+        citations,
+        renderedSearchContent: groundingMetadata?.searchEntryPoint?.renderedContent || null,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      return res.status(500).json({ error: 'Failed to retrieve real-time Google search results.' });
+    }
+  } catch (err: any) {
+    console.error('Error in news agent query:', err);
+    return res.status(500).json({ error: err.message || 'An error occurred while searching real-time news data.' });
+  }
 });
 
 // -------------------------------------------------------------

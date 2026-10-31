@@ -19,7 +19,11 @@ import {
   Brain,
   Layers,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
+  Target
 } from 'lucide-react';
 import { Subject, User, SubjectTopicProgress } from '../types';
 import { topicProgressManager } from '../utils/topicProgress';
@@ -45,7 +49,9 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id || 'english');
+  const [departmentFilter, setDepartmentFilter] = useState<'all' | 'science' | 'art' | 'commercial'>('all');
   const [topicFilter, setTopicFilter] = useState<TopicFilterTab>('all');
+  const [isIsolatedFocus, setIsIsolatedFocus] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Re-read progress whenever topic updates occur or component loads
@@ -57,13 +63,27 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     return () => window.removeEventListener('studynaija_topic_progress_updated', handleUpdate);
   }, []);
 
-  const filteredSubjects = subjects.filter(sub =>
-    sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    sub.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    sub.topics.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredSubjects = subjects.filter(sub => {
+    const matchesSearch =
+      sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      sub.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      sub.topics.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    if (!matchesSearch) return false;
+    if (departmentFilter === 'all') return true;
+    if (departmentFilter === 'science') {
+      return sub.department === 'science' || ['mathematics', 'physics', 'chemistry', 'biology', 'agricultural-science', 'further-maths', 'computer-studies', 'geography', 'technical-drawing', 'food-and-nutrition', 'animal-husbandry', 'basic-electricity', 'fisheries', 'health-education'].includes(sub.id);
+    }
+    if (departmentFilter === 'art') {
+      return sub.department === 'art' || ['literature', 'government', 'crs', 'irs', 'civic', 'history', 'english', 'yoruba', 'igbo', 'hausa', 'french', 'visual-art', 'music'].includes(sub.id);
+    }
+    if (departmentFilter === 'commercial') {
+      return sub.department === 'commercial' || ['economics', 'commerce', 'accounting', 'marketing', 'insurance', 'office-practice', 'store-management', 'bookkeeping', 'data-processing'].includes(sub.id);
+    }
+    return true;
+  });
 
-  const currentSubject = subjects.find(s => s.id === selectedSubjectId) || subjects[0];
+  const currentSubject = subjects.find(s => s.id === selectedSubjectId) || filteredSubjects[0] || subjects[0];
 
   // Calculate progress maps
   const allProgressMap = topicProgressManager.getAllSubjectsProgress(subjects, user);
@@ -181,14 +201,37 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       {/* Main Grid: Subject Selector with Visual Progress Bars & Detailed Topic View */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* Left Column: Subjects List WITH VISUAL PROGRESS BARS */}
+        {/* Left Column: Subjects List WITH VISUAL PROGRESS BARS (Hidden during isolated focus) */}
+        {!isIsolatedFocus && (
         <div className="lg:col-span-5 space-y-3">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Core Subjects ({filteredSubjects.length})</span>
+              <span>Syllabus Subjects ({filteredSubjects.length})</span>
             </span>
             <span className="text-[11px] text-slate-400 font-medium">Topic Coverage %</span>
+          </div>
+
+          {/* Department Filter Selector Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {[
+              { id: 'all', label: 'All Departments' },
+              { id: 'science', label: '🔬 Science' },
+              { id: 'art', label: '🎨 Arts & Humanities' },
+              { id: 'commercial', label: '📊 Commercial' }
+            ].map(dept => (
+              <button
+                key={dept.id}
+                onClick={() => setDepartmentFilter(dept.id as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  departmentFilter === dept.id
+                    ? 'bg-slate-900 text-emerald-400 border border-emerald-500/50 shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                {dept.label}
+              </button>
+            ))}
           </div>
 
           <div className="space-y-2.5">
@@ -287,11 +330,29 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
             })}
           </div>
         </div>
+        )}
 
-        {/* Right Column: Selected Subject Details & Topics Breakdown */}
+        {/* Right Column: Selected Subject Details & Topics Breakdown (Full width in Focus Mode) */}
         {currentSubject && (
-          <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm space-y-7">
+          <div className={`${isIsolatedFocus ? 'lg:col-span-12 max-w-4xl mx-auto w-full' : 'lg:col-span-7'} bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm space-y-7 transition-all`}>
             
+            {/* Focus Mode Banner (Shown when isolated focus is active) */}
+            {isIsolatedFocus && (
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 text-white border border-emerald-500/40 shadow-md">
+                <button
+                  onClick={() => setIsIsolatedFocus(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                >
+                  <ArrowLeft className="w-4 h-4 stroke-[3]" />
+                  <span>Back to All Subjects</span>
+                </button>
+                <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Focus Mode: Showing only <strong className="text-emerald-400">{currentSubject.name}</strong></span>
+                </div>
+              </div>
+            )}
+
             {/* Subject Card Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
               <div>
@@ -309,6 +370,28 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setIsIsolatedFocus(!isIsolatedFocus)}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+                    isIsolatedFocus
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-black'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  }`}
+                  title="Hide other subjects and view only this subject in full distraction-free focus"
+                >
+                  {isIsolatedFocus ? (
+                    <>
+                      <Minimize2 className="w-3.5 h-3.5" />
+                      <span>Exit Focus</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Focus on Subject</span>
+                    </>
+                  )}
+                </button>
+
                 <button
                   onClick={() => onStartPractice(currentSubject.id)}
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"

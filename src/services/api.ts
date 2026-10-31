@@ -1,4 +1,4 @@
-import { User, Subject, Question, Article, ExamResult, AdminStats, PricingPlan, LeaderboardEntry, SubjectChampion, VerifiedArenaMatch, CommunityMessage, CommunityChannel, ModerationResult, SmartWebInsights, JambCountdownData, TournamentState, TournamentBankClaim, SecurityIncident } from '../types';
+import { User, Subject, Question, Article, ExamResult, AdminStats, PricingPlan, LeaderboardEntry, SubjectChampion, VerifiedArenaMatch, CommunityMessage, CommunityChannel, ModerationResult, SmartWebInsights, JambCountdownData, TournamentState, TournamentBankClaim, SecurityIncident, ForumThread, ForumReply, ForumExamCategory } from '../types';
 import { INITIAL_SUBJECTS, INITIAL_QUESTIONS, STUDY_ARTICLES, PRICING_PLANS } from '../mockData';
 import { generateLeaderboard, LeaderboardFilterOptions, LeaderboardStatsSummary } from '../utils/leaderboardData';
 
@@ -1207,6 +1207,239 @@ export const api = {
       headers: getHeaders(false)
     });
     return await res.json();
+  },
+
+  // Universal Past Question Harvester (JAMB, WAEC, NECO)
+  getHarvestPresetSources: async () => {
+    const res = await fetch('/api/harvest-questions/preset-sources', {
+      headers: getHeaders(false)
+    });
+    return await res.json();
+  },
+
+  harvestQuestionsFromUrl: async (url: string, examType: string, subjectId: string, year?: number) => {
+    const res = await fetch('/api/harvest-questions/from-url', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ url, examType, subjectId, year })
+    });
+    return await res.json();
+  },
+
+  harvestQuestionsFromText: async (rawText: string, examType: string, subjectId: string, year?: number) => {
+    const res = await fetch('/api/harvest-questions/from-text', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ rawText, examType, subjectId, year })
+    });
+    return await res.json();
+  },
+
+  harvestQuestionsFromSearch: async (examType: string, subjectId: string, year?: number, topic?: string, count: number = 10) => {
+    const res = await fetch('/api/harvest-questions/search', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ examType, subjectId, year, topic, count })
+    });
+    return await res.json();
+  },
+
+  saveHarvestedQuestionsToBank: async (questions: Question[]) => {
+    const res = await fetch('/api/harvest-questions/save-to-bank', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ questions })
+    });
+    return await res.json();
+  },
+
+  // Real-Time Google Search News & Fact-Checker Agent
+  getTrendingNewsTopics: async () => {
+    const res = await fetch('/api/news-agent/trending-topics', {
+      headers: getHeaders(false)
+    });
+    return await res.json();
+  },
+
+  queryNewsAgent: async (query: string, mode: 'news' | 'factcheck' | 'current_events' | 'exam_updates' = 'news') => {
+    const res = await fetch('/api/news-agent/query', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ query, mode })
+    });
+    return await res.json();
+  },
+
+  // =========================================================================
+  // STUDYNAIJA COMMUNITY FORUM API (Discussions, QA, Admin Moderation)
+  // =========================================================================
+  getForumThreads: async (params?: {
+    examCategory?: string;
+    subjectId?: string;
+    search?: string;
+    sort?: 'latest' | 'popular' | 'unanswered' | 'solved';
+    limit?: number;
+    offset?: number;
+  }): Promise<{ success: boolean; threads: ForumThread[]; total: number }> => {
+    const query = new URLSearchParams();
+    if (params?.examCategory && params.examCategory !== 'ALL') query.set('examCategory', params.examCategory);
+    if (params?.subjectId && params.subjectId !== 'all') query.set('subjectId', params.subjectId);
+    if (params?.search) query.set('search', params.search);
+    if (params?.sort) query.set('sort', params.sort);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+
+    const res = await fetch(`/api/forum/threads?${query.toString()}`, {
+      headers: getHeaders(false)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to fetch forum threads');
+    return data;
+  },
+
+  getForumThread: async (threadId: string): Promise<{ success: boolean; thread: ForumThread }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}`, {
+      headers: getHeaders(false)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to fetch forum thread');
+    return data;
+  },
+
+  createForumThread: async (payload: {
+    title: string;
+    content: string;
+    examCategory: ForumExamCategory;
+    subjectId?: string;
+    subjectName?: string;
+    tags?: string[];
+    authorName?: string;
+    authorEmail?: string;
+    userTournamentBadge?: '1st' | '2nd' | '3rd' | null;
+    userThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
+  }): Promise<{ success: boolean; thread: ForumThread; moderation?: ModerationResult }> => {
+    const res = await fetch('/api/forum/threads', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err: any = new Error(data.error || 'Failed to create forum thread');
+      err.moderation = data.moderation;
+      err.blocked = data.blocked;
+      throw err;
+    }
+    return data;
+  },
+
+  postForumReply: async (threadId: string, payload: {
+    content: string;
+    authorName?: string;
+    authorEmail?: string;
+    userTournamentBadge?: '1st' | '2nd' | '3rd' | null;
+    userThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
+  }): Promise<{ success: boolean; reply: ForumReply; thread: ForumThread; moderation?: ModerationResult }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/reply`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err: any = new Error(data.error || 'Failed to post forum reply');
+      err.moderation = data.moderation;
+      err.blocked = data.blocked;
+      throw err;
+    }
+    return data;
+  },
+
+  likeForumThread: async (threadId: string, userId?: string): Promise<{ success: boolean; likes: number; isLiked: boolean }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/like`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ userId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to like thread');
+    return data;
+  },
+
+  likeForumReply: async (threadId: string, replyId: string, userId?: string): Promise<{ success: boolean; likes: number; isLiked: boolean }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}/like`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ userId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to like reply');
+    return data;
+  },
+
+  pinForumThread: async (threadId: string, isPinned: boolean): Promise<{ success: boolean; isPinned: boolean }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/pin`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ isPinned })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to pin/unpin thread');
+    return data;
+  },
+
+  lockForumThread: async (threadId: string, isLocked: boolean): Promise<{ success: boolean; isLocked: boolean }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/lock`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ isLocked })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to lock/unlock thread');
+    return data;
+  },
+
+  markForumThreadSolved: async (threadId: string, replyId?: string, isSolved?: boolean): Promise<{ success: boolean; isSolved: boolean; thread: ForumThread }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/solve`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ replyId, isSolved })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to mark thread status');
+    return data;
+  },
+
+  moderateForumThread: async (threadId: string, action: 'pin' | 'lock' | 'delete' | 'flag' | 'unflag', note?: string): Promise<{ success: boolean; thread?: ForumThread }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/moderate`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ action, note })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to execute moderation action');
+    return data;
+  },
+
+  deleteForumThread: async (threadId: string): Promise<{ success: boolean }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete thread');
+    return data;
+  },
+
+  deleteForumReply: async (threadId: string, replyId: string): Promise<{ success: boolean }> => {
+    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete reply');
+    return data;
   }
 };
+
 

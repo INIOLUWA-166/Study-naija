@@ -24,7 +24,8 @@ import {
   CheckCheck,
   Laptop,
   Mail,
-  Send
+  Send,
+  Scale
 } from 'lucide-react';
 import { User, AchievementBadge, ExamResult } from '../types';
 import { gamification, getRankFromXp } from '../utils/gamification';
@@ -40,6 +41,7 @@ interface StudentProfileModalProps {
   stats?: { questionsAnswered?: number; averageScore?: number; bestScore?: number };
   recentExams?: ExamResult[];
   onUpdateUser?: (updated: User) => void;
+  onOpenHonorCode?: () => void;
 }
 
 export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
@@ -49,7 +51,8 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   onNavigate,
   stats,
   recentExams = [],
-  onUpdateUser
+  onUpdateUser,
+  onOpenHonorCode
 }) => {
   const [activeTab, setActiveTab] = useState<'honours' | 'settings'>('honours');
   const [copied, setCopied] = useState(false);
@@ -342,6 +345,25 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono">Proctor Score</div>
                 </div>
+              </div>
+
+              {/* Scholar Honor Code & Standing Quick Access */}
+              <div className="px-4 py-2.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-slate-300 text-[11px]">
+                    Academic Rules, Standing Tiers & Appeals
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenHonorCode?.();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] transition cursor-pointer"
+                >
+                  View Code of Conduct →
+                </button>
               </div>
 
               {/* Academic Rank & Progress */}
