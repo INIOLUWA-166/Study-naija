@@ -35,7 +35,14 @@ import {
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-const PORT = 3000;
+const portArgIdx = process.argv.indexOf('--port');
+const cliPort = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? parseInt(process.argv[portArgIdx + 1], 10) : undefined;
+const PORT = cliPort || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+
+const hostArgIdx = process.argv.indexOf('--host');
+const cliHost = hostArgIdx !== -1 && process.argv[hostArgIdx + 1] ? process.argv[hostArgIdx + 1] : undefined;
+const HOST = cliHost || process.env.HOST || '0.0.0.0';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'studynaija-secure-token-secret-2027';
 
 // Lazy Gemini AI Client Initialization (Server-Side Only)
@@ -6879,11 +6886,10 @@ app.get('/twa-manifest.json', (req, res) => {
 // -------------------------------------------------------------
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: isHmrDisabled ? false : undefined,
+        hmr: false,
       },
       appType: 'spa',
     });
@@ -6907,8 +6913,16 @@ async function startServer() {
     }
   });
 
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🇳🇬 StudyNaija Server & 1v1 Arena WebSocket running at http://0.0.0.0:${PORT}`);
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`🛡️ StudyNaija Port Guard: Port ${PORT} is currently in use.`);
+    } else {
+      console.error('🛡️ StudyNaija Server Error:', err);
+    }
+  });
+
+  server.listen(PORT, HOST, () => {
+    console.log(`🇳🇬 StudyNaija Server & 1v1 Arena WebSocket running at http://${HOST}:${PORT}`);
   });
 }
 
