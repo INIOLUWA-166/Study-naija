@@ -32,7 +32,7 @@ import {
 import { Subject, Question, ExamResult, User } from '../types';
 import { api } from '../services/api';
 import { saveExamResultToFirestore } from '../services/firebase';
-import { shuffleQuestionOptions } from '../utils/questionBank';
+import { shuffleQuestionOptions, EXTENDED_QUESTIONS } from '../utils/questionBank';
 import { createDynamicQuestionVariant, shuffleQuestionOptionsFair } from '../utils/questionRandomizer';
 import { aiVoice, VoiceFeedbackContent } from '../utils/aiVoice';
 import { gamification } from '../utils/gamification';
@@ -159,7 +159,8 @@ export const MockExamView: React.FC<MockExamViewProps> = ({
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(() => gamification.getBookmarkedIds());
 
   const handleToggleBookmark = async (qId: string) => {
-    const res = gamification.toggleBookmark(qId);
+    const found = questions.find(q => q.id === qId) || EXTENDED_QUESTIONS.find(q => q.id === qId);
+    const res = gamification.toggleBookmark(qId, found);
     setBookmarkedIds(res.allIds);
     try {
       await api.toggleBookmarkQuestion(qId, res.isBookmarked);
@@ -227,21 +228,25 @@ export const MockExamView: React.FC<MockExamViewProps> = ({
       if (data.examSessionId) {
         setExamSessionId(data.examSessionId);
       }
-      // Strictly deduplicate questions by ID and ensure options are scrambled
+      // Strictly deduplicate questions by both ID and question text to guarantee zero repetition
       const seen = new Set<string>();
+      const seenTexts = new Set<string>();
       const dedupedQuestions: Question[] = [];
       (data.questions || []).forEach((q: Question) => {
-        if (!seen.has(q.id)) {
+        const normText = (q.question || '').trim().toLowerCase();
+        if (!seen.has(q.id) && !seenTexts.has(normText)) {
           seen.add(q.id);
-          // If not already scrambled by server, scramble options and generate dynamic variant
-          const varied = createDynamicQuestionVariant(q);
-          dedupedQuestions.push(shuffleQuestionOptionsFair(varied));
+          seenTexts.add(normText);
+          dedupedQuestions.push(q);
         }
       });
 
       // Update session seen mock questions
       try {
-        const updatedSeen = Array.from(new Set([...sessionSeenMockIds, ...dedupedQuestions.map(q => q.id)]));
+        let updatedSeen = Array.from(new Set([...sessionSeenMockIds, ...dedupedQuestions.map(q => q.id)]));
+        if (updatedSeen.length > 200) {
+          updatedSeen = updatedSeen.slice(-100);
+        }
         sessionStorage.setItem('studynaija_session_seen_mock_ids', JSON.stringify(updatedSeen));
       } catch {}
 

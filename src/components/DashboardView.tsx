@@ -34,7 +34,8 @@ import {
   Moon,
   Scale,
   Globe,
-  Newspaper
+  Newspaper,
+  Share2
 } from 'lucide-react';
 import { User, ExamResult, Question, AchievementBadge, WeeklyStudyGoal, WeeklyStudyGoalsState } from '../types';
 import { api } from '../services/api';
@@ -43,9 +44,11 @@ import { gamification, getRankFromXp } from '../utils/gamification';
 import { achievementManager } from '../utils/achievementBadges';
 import { weeklyGoalsManager } from '../utils/weeklyGoalsManager';
 import { EXTENDED_QUESTIONS } from '../utils/questionBank';
+import { INITIAL_SUBJECTS } from '../mockData';
 import { DailyStudyGoals } from './DailyStudyGoals';
 import { WeeklyStudyGoals } from './WeeklyStudyGoals';
 import { StudyPlanner } from './StudyPlanner';
+import { DailyStudyPlanner } from './DailyStudyPlanner';
 import { FocusSessionTimer } from './FocusSessionTimer';
 import { DailyStreakCounter } from './DailyStreakCounter';
 import { StudentLeaderboard } from './StudentLeaderboard';
@@ -119,19 +122,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const fetchSavedQuestions = async () => {
     try {
-      const res = await api.getBookmarkedQuestions();
-      if (res && Array.isArray(res.bookmarks) && res.bookmarks.length > 0) {
-        setSavedQuestions(res.bookmarks);
-      } else {
-        // Local fallback: match local bookmarked IDs from question bank
-        const localIds = gamification.getBookmarkedIds();
-        const matched = EXTENDED_QUESTIONS.filter(q => localIds.includes(q.id));
-        setSavedQuestions(matched);
+      const localFull = gamification.getSavedFullQuestions();
+      const localIds = gamification.getBookmarkedIds();
+      let serverBookmarks: Question[] = [];
+      try {
+        const res = await api.getBookmarkedQuestions();
+        if (res && Array.isArray(res.bookmarks)) {
+          serverBookmarks = res.bookmarks;
+        }
+      } catch {}
+
+      // Combine all sources: server, local full objects, and EXTENDED_QUESTIONS match
+      const matchedExtended = EXTENDED_QUESTIONS.filter(q => localIds.includes(q.id));
+      const combined = [...localFull, ...serverBookmarks, ...matchedExtended];
+      
+      // Deduplicate by question id
+      const seen = new Set<string>();
+      const uniqueSaved: Question[] = [];
+      for (const q of combined) {
+        if (q && q.id && !seen.has(q.id)) {
+          seen.add(q.id);
+          uniqueSaved.push(q);
+        }
       }
+      setSavedQuestions(uniqueSaved);
     } catch {
+      const localFull = gamification.getSavedFullQuestions();
       const localIds = gamification.getBookmarkedIds();
       const matched = EXTENDED_QUESTIONS.filter(q => localIds.includes(q.id));
-      setSavedQuestions(matched);
+      const combined = [...localFull, ...matched];
+      const seen = new Set<string>();
+      const uniqueSaved = combined.filter(q => {
+        if (!q?.id || seen.has(q.id)) return false;
+        seen.add(q.id);
+        return true;
+      });
+      setSavedQuestions(uniqueSaved);
     }
   };
 
@@ -189,10 +215,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     window.addEventListener('studynaija_streak_updated', handleStreakUpdate);
     window.addEventListener('studynaija_xp_updated', handleXpUpdate);
     window.addEventListener('studynaija_badge_unlocked', handleBadgeUnlocked);
+    window.addEventListener('studynaija_saved_questions_updated', fetchSavedQuestions);
     return () => {
       window.removeEventListener('studynaija_streak_updated', handleStreakUpdate);
       window.removeEventListener('studynaija_xp_updated', handleXpUpdate);
       window.removeEventListener('studynaija_badge_unlocked', handleBadgeUnlocked);
+      window.removeEventListener('studynaija_saved_questions_updated', fetchSavedQuestions);
     };
   }, [user]);
 
@@ -213,6 +241,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (user?.id) {
       removeBookmarkFromFirestore(user.id, qId).catch(() => {});
     }
+  };
+
+  const handleLaunchWeakTopicDrill = () => {
+    const weakSubName = stats?.weakestSubject || 'Physics';
+    const subMap: Record<string, string> = {
+      'physics': 'physics',
+      'chemistry': 'chemistry',
+      'mathematics': 'mathematics',
+      'english': 'english',
+      'biology': 'biology',
+      'economics': 'economics',
+      'government': 'government',
+      'literature': 'literature',
+      'crk': 'crk',
+      'commerce': 'commerce',
+      'accounting': 'accounting',
+      'geography': 'geography',
+      'agricultural-science': 'agricultural-science'
+    };
+    const subId = subMap[weakSubName.toLowerCase().replace(/\s+/g, '-')] || 'physics';
+    const weakQuestions = EXTENDED_QUESTIONS.filter(q => q.subjectId.toLowerCase() === subId).slice(0, 15);
+    
+    onNavigate('practice', {
+      subjectId: subId,
+      customQuestions: weakQuestions.length > 0 ? weakQuestions : undefined
+    });
+  };
+
+  const handleShareStreakWhatsApp = () => {
+    const text = encodeURIComponent(
+      `🔥 I'm on a ${streakInfo.currentStreak}-Day Study Streak on StudyNaija preparing for JAMB & WAEC CBT! 🇳🇬\n\n` +
+      `⚡ Daily Practice: ${stats?.questionsAnswered || 0} questions solved\n` +
+      `🎯 Target Exam: ${user?.targetExam || 'JAMB UTME'}\n` +
+      `🏆 Join me and test your knowledge with 0 duplicate questions at: ${window.location.origin}`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
   const studentName = user?.name || dashboardData?.user?.name || 'Candidate';
@@ -348,12 +412,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
 
           <button
-            onClick={() => onNavigate('question-grabber')}
+            onClick={() => setActiveTab('study-planner')}
             className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-black text-xs rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center gap-1.5 cursor-pointer hover:scale-102"
-            title="Grab past questions of JAMB, WAEC & NECO from any website link or paper"
+            title="Open Daily Study Planner & Topic Schedule"
           >
-            <Globe className="w-3.5 h-3.5 text-cyan-200" />
-            <span>Past Q Grabber</span>
+            <Calendar className="w-3.5 h-3.5 text-cyan-200" />
+            <span>Study Planner 📅</span>
           </button>
 
           <button
@@ -379,6 +443,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           >
             <BookOpen className="w-4 h-4 fill-slate-950" />
             <span>Launch Practice</span>
+          </button>
+
+          <button
+            onClick={handleShareStreakWhatsApp}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+            title="Share your daily study streak on WhatsApp Status"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Share Streak 📲</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 1-CLICK AI WEAKNESS REMEDIATION DRILL CARD */}
+      <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-7 border border-rose-500/30 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="space-y-1.5 relative z-10 max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-400/40 uppercase tracking-widest flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+              <span>AI Remediation Engine</span>
+            </span>
+            <span className="text-xs text-rose-200 font-bold">Priority Subject: {stats?.weakestSubject || 'Physics'}</span>
+          </div>
+          <h2 className="text-lg sm:text-2xl font-black font-['Outfit'] text-white">
+            Target Your Weak Topics • 1-Click Remediation Drill
+          </h2>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Our diagnostic engine spotted room for rapid score gain in <strong>{stats?.weakestSubject || 'Physics'}</strong>. We curated 15 targeted questions with step-by-step verified teacher solutions to bridge your knowledge gaps before exam day.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 shrink-0 relative z-10">
+          <button
+            onClick={handleLaunchWeakTopicDrill}
+            className="px-6 py-3 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black text-xs rounded-xl shadow-[0_0_20px_rgba(244,63,94,0.3)] transition flex items-center gap-2 cursor-pointer hover:scale-102"
+          >
+            <Zap className="w-4 h-4 fill-white" />
+            <span>Launch 15-Question Remediation Drill →</span>
           </button>
         </div>
       </div>
@@ -572,16 +675,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onClick={() => setActiveTab('study-planner')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
             activeTab === 'study-planner'
-              ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white font-black shadow-md'
-              : 'bg-white text-slate-700 hover:bg-indigo-50 hover:text-indigo-800 border border-slate-200 hover:border-indigo-300'
+              ? 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white font-black shadow-md'
+              : 'bg-white text-slate-700 hover:bg-cyan-50 hover:text-cyan-800 border border-slate-200 hover:border-cyan-300'
           }`}
         >
-          <BookOpen className={`w-3.5 h-3.5 ${activeTab === 'study-planner' ? 'text-cyan-200' : 'text-indigo-600'}`} />
-          <span>Study Planner</span>
+          <Calendar className={`w-3.5 h-3.5 ${activeTab === 'study-planner' ? 'text-white' : 'text-cyan-600'}`} />
+          <span>Daily Study Planner</span>
           <span className={`px-2 py-0.2 rounded-full text-[10px] font-black ${
-            activeTab === 'study-planner' ? 'bg-slate-950 text-cyan-200' : 'bg-indigo-100 text-indigo-800'
+            activeTab === 'study-planner' ? 'bg-slate-950 text-cyan-200' : 'bg-cyan-100 text-cyan-800'
           }`}>
-            Per-Subject Goals
+            Today's Topics
           </span>
         </button>
 
@@ -623,16 +726,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onClick={() => setActiveTab('saved-questions')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
             activeTab === 'saved-questions'
-              ? 'bg-emerald-600 text-white shadow-xs'
+              ? 'bg-emerald-600 text-white shadow-xs font-black'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
           <Bookmark className="w-3.5 h-3.5" />
-          <span>Saved Questions</span>
+          <span>Saved</span>
           <span className={`px-2 py-0.2 rounded-full text-[10px] font-black ${
             activeTab === 'saved-questions' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'
           }`}>
-            {savedQuestions.length}
+            {savedQuestions.length} Qs
           </span>
         </button>
 
@@ -710,6 +813,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             )}
           </div>
+
+          {filteredSavedQuestions.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-50/70 border border-emerald-200/80 p-3.5 rounded-2xl">
+              <div className="text-xs text-emerald-950 font-medium">
+                Showing <strong>{filteredSavedQuestions.length}</strong> saved {filteredSavedQuestions.length === 1 ? 'question' : 'questions'} with verified explanations.
+              </div>
+              <button
+                onClick={() => onNavigate('practice', { customQuestions: filteredSavedQuestions })}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Practice Saved Questions Now ({filteredSavedQuestions.length}) →</span>
+              </button>
+            </div>
+          )}
 
           {filteredSavedQuestions.length === 0 ? (
             <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-3xl space-y-4">
@@ -858,13 +976,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {/* VIEW: STUDY PLANNER (PER-SUBJECT DAILY GOALS) */}
+      {/* VIEW: DAILY STUDY PLANNER & TOPIC SCHEDULER */}
       {activeTab === 'study-planner' && (
-        <div className="animate-in fade-in duration-200">
-          <StudyPlanner
+        <div className="animate-in fade-in duration-200 space-y-8">
+          <DailyStudyPlanner
             user={user}
+            subjects={INITIAL_SUBJECTS}
             onNavigate={onNavigate}
+            onOpenAITutor={onOpenAITutor}
           />
+
+          {/* Supplementary Per-Subject Practice Targets */}
+          <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs uppercase font-mono tracking-widest text-cyan-600 dark:text-cyan-400 font-bold px-2.5 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-950 border border-cyan-200 dark:border-cyan-800">
+                PRACTICE TARGETS // PER-SUBJECT GOALS
+              </span>
+            </div>
+            <StudyPlanner
+              user={user}
+              onNavigate={onNavigate}
+            />
+          </div>
         </div>
       )}
 

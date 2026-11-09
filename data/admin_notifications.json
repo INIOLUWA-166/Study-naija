@@ -1,5 +1,21 @@
 [
   {
+    "id": "notif-1794010096081-1f0an",
+    "type": "payment_pending",
+    "title": "💳 New Bank Transfer: ₦10,000 from Test Student",
+    "message": "A student submitted a bank transfer payment!\n\nPlan: Medium Plan\nAmount: ₦10,000\nSender: Test Student (GTBank)\nReference: TEST-REF-999\nStudent: Chukwuebuka Obi (student@studynaija.ng)\n\nPlease check your OPay app (9166059676) and approve in the Admin Portal!",
+    "timestamp": "2026-11-07T00:08:16.081Z",
+    "read": false,
+    "emailSentTo": "luvkidjaja@gmail.com",
+    "metadata": {
+      "reference": "TEST-REF-999",
+      "amount": 10000,
+      "sender": "Test Student",
+      "bank": "GTBank",
+      "studentEmail": "student@studynaija.ng"
+    }
+  },
+  {
     "id": "notif-1791421292817-f6e5t",
     "type": "system",
     "title": "🚨 Sentinel AI SUSPENDED Chukwuebuka Obi: PROCTORING VIOLATION",

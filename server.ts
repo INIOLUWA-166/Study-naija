@@ -94,10 +94,10 @@ export interface MerchantPaymentConfig {
 const defaultPaymentConfig: MerchantPaymentConfig = {
   bankName: 'OPay (PayCom)',
   accountNumber: '9166059676',
-  accountName: 'INIOLUWA JESULEJE MICHAEL',
+  accountName: 'INIOLUWA JESULEKE MICHEAL',
   bankCode: '999992',
   ussdTemplate: '*955*2*9166059676*{amount}#',
-  instructions: 'Transfer the fee directly to OPay account 9166059676 (INIOLUWA JESULEJE MICHAEL) via your OPay app, PalmPay, Kuda, or ANY commercial bank app (GTBank, Zenith, Access, First Bank, UBA). Once sent, click "Confirm Payment with AI" to activate access instantly!'
+  instructions: 'Transfer the fee directly to OPay account 9166059676 (INIOLUWA JESULEKE MICHEAL) via your OPay app, PalmPay, Kuda, or ANY commercial bank app (GTBank, Zenith, Access, First Bank, UBA). Once sent, click "Confirm Payment with AI" to activate access instantly!'
 };
 
 let merchantPaymentConfig: MerchantPaymentConfig = { ...defaultPaymentConfig };
@@ -299,7 +299,6 @@ export interface PaymentRecord {
   accountName: string;
   senderAccountName?: string;
   senderBank?: string;
-  bankSessionId?: string;
   receiptScreenshotUrl?: string;
   isTrollFlagged?: boolean;
   trollFlaggedAt?: number;
@@ -352,7 +351,7 @@ if (payments.length === 0) {
       paymentMethod: 'opay',
       bankName: 'OPay (PayCom)',
       accountNumber: '9166059676',
-      accountName: 'INIOLUWA JESULEJE MICHAEL',
+      accountName: 'INIOLUWA JESULEKE MICHEAL',
       senderAccountName: 'Fatima Bello',
       senderBank: 'OPay App',
       status: 'pending',
@@ -369,7 +368,7 @@ if (payments.length === 0) {
 const initialUsers: (User & { passwordHash: string })[] = [
   {
     id: 'user-admin-inioluwa',
-    name: 'INIOLUWA JESULEJE MICHAEL',
+    name: 'INIOLUWA JESULEKE MICHEAL',
     email: 'luvkidjaja@gmail.com',
     phone: '9166059676',
     passwordHash: bcrypt.hashSync('AdminPass123!', 10),
@@ -1836,6 +1835,34 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Access Denied: Incorrect password. You cannot enter the website without the right credentials.' });
     }
 
+    // Check if user is permanently banned by Admin
+    if (user.isBanned) {
+      return res.status(403).json({
+        error: `ACCESS DENIED: Your student account has been permanently banned by the Admin. Reason: ${user.banReason || 'Academic integrity or code of conduct violation'}. Contact luvkidjaja@gmail.com for inquiries.`,
+        isBanned: true,
+        banReason: user.banReason
+      });
+    }
+
+    // Check if user is currently suspended by Admin
+    if (user.isSuspended) {
+      if (user.suspensionExpiresAt && new Date(user.suspensionExpiresAt).getTime() > Date.now()) {
+        const expiresFormatted = new Date(user.suspensionExpiresAt).toLocaleString();
+        return res.status(403).json({
+          error: `ACCESS DENIED: Your student account is currently suspended until ${expiresFormatted}. Reason: ${user.suspensionReason || 'Account suspended by Admin'}.`,
+          isSuspended: true,
+          suspensionReason: user.suspensionReason,
+          suspensionExpiresAt: user.suspensionExpiresAt
+        });
+      } else {
+        // Suspension duration expired - auto-reinstate account
+        user.isSuspended = false;
+        user.suspensionExpiresAt = null;
+        user.suspensionReason = undefined;
+        saveUsers();
+      }
+    }
+
     // Ensure educationLevel exists for legacy accounts
     if (!user.educationLevel) {
       user.educationLevel = 'secondary';
@@ -2153,8 +2180,22 @@ app.get('/api/questions', optionalAuth, (req, res) => {
     filtered = shuffled.map(q => createDynamicQuestionVariant(q, rng));
   }
 
+  // Deduplicate questions by normalized question text so no question ever repeats
+  const seenTexts = new Set<string>();
+  const seenIds = new Set<string>();
+  const distinctQuestions: Question[] = [];
+  for (const q of filtered) {
+    const norm = (q.question || '').trim().toLowerCase();
+    if (!seenTexts.has(norm) && !seenIds.has(q.id)) {
+      seenTexts.add(norm);
+      seenIds.add(q.id);
+      distinctQuestions.push(q);
+    }
+  }
+  filtered = distinctQuestions;
+
   const total = filtered.length;
-  const l = limit ? parseInt(limit as string, 10) : 50;
+  const l = limit ? parseInt(limit as string, 10) : 200;
   const o = offset ? parseInt(offset as string, 10) : 0;
   const page = filtered.slice(o, o + l);
 
@@ -2208,28 +2249,66 @@ app.post('/api/exams/generate', optionalAuth, (req, res) => {
 
   const selectedQuestions: Question[] = [];
   const seenIds = new Set<string>();
+  const seenTexts = new Set<string>();
 
   subjectsToUse.forEach(subId => {
-    let subQuestions = questions.filter(q => q.subjectId === subId && !seenIds.has(q.id) && !excludeSet.has(q.id));
-    if (subQuestions.length < countPerSub) {
-      // If unseen questions pool is exhausted for this subject, recycle unseen within this exam
-      subQuestions = questions.filter(q => q.subjectId === subId && !seenIds.has(q.id));
-    }
+    // 1. Gather all questions for this subject in the bank
+    const allSubQ = questions.filter(q => q.subjectId === subId);
+    if (allSubQ.length === 0) return;
 
-    // Seeded Fisher-Yates shuffle so candidate order is unique per student
-    const shuffled = [...subQuestions];
-    for (let i = shuffled.length - 1; i > 0; i--) {
+    // 2. Unseen questions that haven't been seen in prior mock exams in this session and not in current exam
+    let unseenQ = allSubQ.filter(q => {
+      const norm = (q.question || '').trim().toLowerCase();
+      return !excludeSet.has(q.id) && !seenTexts.has(norm) && !seenIds.has(q.id);
+    });
+
+    // Shuffle unseen questions
+    for (let i = unseenQ.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      [unseenQ[i], unseenQ[j]] = [unseenQ[j], unseenQ[i]];
     }
 
-    const picked = shuffled.slice(0, countPerSub);
+    const pickedForThisSub: Question[] = [];
 
-    picked.forEach(q => {
-      seenIds.add(q.id);
-      // Transform each question with dynamic parameters AND scrambled options
-      const dynamicVariant = createDynamicQuestionVariant(q, rng);
-      selectedQuestions.push(dynamicVariant);
+    // First pick from unseen questions up to countPerSub
+    for (const q of unseenQ) {
+      if (pickedForThisSub.length >= countPerSub) break;
+      const norm = (q.question || '').trim().toLowerCase();
+      if (!seenTexts.has(norm)) {
+        seenTexts.add(norm);
+        seenIds.add(q.id);
+        pickedForThisSub.push(q);
+      }
+    }
+
+    // If unseen questions are fewer than countPerSub, pick from remaining distinct questions in allSubQ
+    // that have NOT been picked for the CURRENT exam sitting (guaranteeing zero repeats in this exam)
+    if (pickedForThisSub.length < countPerSub) {
+      const remainingCandidates = allSubQ.filter(q => {
+        const norm = (q.question || '').trim().toLowerCase();
+        return !seenTexts.has(norm);
+      });
+
+      for (let i = remainingCandidates.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [remainingCandidates[i], remainingCandidates[j]] = [remainingCandidates[j], remainingCandidates[i]];
+      }
+
+      for (const q of remainingCandidates) {
+        if (pickedForThisSub.length >= countPerSub) break;
+        const norm = (q.question || '').trim().toLowerCase();
+        if (!seenTexts.has(norm)) {
+          seenTexts.add(norm);
+          seenIds.add(q.id);
+          pickedForThisSub.push(q);
+        }
+      }
+    }
+
+    // Scramble option keys (A, B, C, D) fairly so answer positions are randomized per student
+    pickedForThisSub.forEach(q => {
+      const fairVariant = createDynamicQuestionVariant(q, rng);
+      selectedQuestions.push(fairVariant);
     });
   });
 
@@ -3447,19 +3526,6 @@ app.post('/api/payment/initialize', optionalAuth, (req, res) => {
     accountNumber = merchantPaymentConfig.accountNumber;
     beneficiaryName = merchantPaymentConfig.accountName;
     ussdString = `*652*000*${plan.priceAmount}#`;
-  } else if (method === 'cards_ng') {
-    refPrefix = 'SNJ-PSTK';
-    bankName = 'OPay Direct / NIBSS Instant Transfer';
-    accountNumber = merchantPaymentConfig.accountNumber;
-    beneficiaryName = merchantPaymentConfig.accountName;
-    ussdString = '';
-  } else if (method === 'international_card' || method === 'paypal_stripe') {
-    refPrefix = 'SNJ-INTL';
-    bankName = 'Global Merchant Gateway (Visa / Mastercard / Stripe USD)';
-    accountNumber = `USD Equivalent: $${(plan.priceAmount / 1500).toFixed(2)}`;
-    beneficiaryName = merchantPaymentConfig.accountName;
-    redirectUrl = 'https://checkout.stripe.com/c/pay/studynaija-global';
-    ussdString = '';
   }
 
   // Check if student has active 1v1 Arena 25% discount!
@@ -3576,7 +3642,7 @@ app.post('/api/admin/payment-config', authenticateToken, requireAdmin, (req, res
 // Option A: Student Submits Payment Transfer for Verification
 app.post('/api/payment/verify', optionalAuth, async (req, res) => {
   try {
-    const { reference, senderAccountName, senderBank, bankSessionId, receiptScreenshotUrl, planId, userId, userEmail } = req.body;
+    const { reference, senderAccountName, senderBank, receiptScreenshotUrl, planId, userId, userEmail } = req.body;
     const headerUserId = req.headers['x-user-id'] as string | undefined;
     const headerEmail = req.headers['x-user-email'] as string | undefined;
 
@@ -3618,13 +3684,6 @@ app.post('/api/payment/verify', optionalAuth, async (req, res) => {
         });
       }
 
-      // Protection #2: Mandatory Bank Transaction Reference / Session ID
-      if (!bankSessionId || typeof bankSessionId !== 'string' || bankSessionId.trim().length < 6) {
-        return res.status(400).json({
-          error: 'Missing Bank Transaction Reference: Please enter the 6-to-30 digit Transaction Reference or NIP Session ID from your debit alert or bank receipt.'
-        });
-      }
-
       // Protection #1: Mandatory Proof of Payment / Receipt Screenshot
       if (!receiptScreenshotUrl || typeof receiptScreenshotUrl !== 'string' || !receiptScreenshotUrl.startsWith('data:image/')) {
         return res.status(400).json({
@@ -3654,7 +3713,6 @@ app.post('/api/payment/verify', optionalAuth, async (req, res) => {
         bankName: merchantPaymentConfig.bankName,
         accountNumber: merchantPaymentConfig.accountNumber,
         accountName: merchantPaymentConfig.accountName,
-        bankSessionId: bankSessionId.trim(),
         receiptScreenshotUrl: receiptScreenshotUrl,
         status: 'pending',
         createdAt: Date.now()
@@ -3685,12 +3743,10 @@ app.post('/api/payment/verify', optionalAuth, async (req, res) => {
     // Option A: Student Submits Payment Transfer for Manual Admin Approval
     const sender = senderAccountName?.trim() || user.name || 'StudyNaija Scholar';
     const bank = senderBank?.trim() || 'Direct Transfer / OPay';
-    const session = (bankSessionId || pRec.bankSessionId || '').trim();
-    const aiAuditNotes = `AI Audit: Student logged payment submission of ₦${pRec.amount.toLocaleString()} for ${pRec.planName} from ${sender} (${bank}) | Bank Session ID: ${session || 'N/A'}. Receipt screenshot attached. Queued for Inioluwa's manual confirmation on OPay (${merchantPaymentConfig.accountNumber} - ${merchantPaymentConfig.accountName}).`;
+    const aiAuditNotes = `AI Audit: Student logged payment submission of ₦${pRec.amount.toLocaleString()} for ${pRec.planName} from ${sender} (${bank}). Receipt screenshot attached. Queued for Inioluwa's manual confirmation on OPay (${merchantPaymentConfig.accountNumber} - ${merchantPaymentConfig.accountName}).`;
 
     pRec.senderAccountName = sender;
     pRec.senderBank = bank;
-    if (session) pRec.bankSessionId = session;
     if (receiptScreenshotUrl) pRec.receiptScreenshotUrl = receiptScreenshotUrl;
     pRec.submittedAt = Date.now();
     pRec.status = 'pending';
@@ -3703,8 +3759,8 @@ app.post('/api/payment/verify', optionalAuth, async (req, res) => {
     sendAdminNotification({
       type: 'payment_pending',
       title: `💳 New Bank Transfer: ₦${pRec.amount.toLocaleString()} from ${sender}`,
-      message: `A student submitted a bank transfer payment!\n\nPlan: ${pRec.planName}\nAmount: ₦${pRec.amount.toLocaleString()}\nSender: ${sender} (${bank})\nSession ID: ${session || 'N/A'}\nReference: ${reference}\nStudent: ${user.name} (${user.email})\n\nPlease check your OPay app (${merchantPaymentConfig.accountNumber}) and approve in the Admin Portal!`,
-      details: { reference, amount: pRec.amount, sender, bank, session, studentEmail: user.email }
+      message: `A student submitted a bank transfer payment!\n\nPlan: ${pRec.planName}\nAmount: ₦${pRec.amount.toLocaleString()}\nSender: ${sender} (${bank})\nReference: ${reference}\nStudent: ${user.name} (${user.email})\n\nPlease check your OPay app (${merchantPaymentConfig.accountNumber}) and approve in the Admin Portal!`,
+      details: { reference, amount: pRec.amount, sender, bank, studentEmail: user.email }
     });
 
     const { passwordHash: _, ...safeUser } = user;
@@ -4114,9 +4170,33 @@ app.get('/api/admin/security/stats', authenticateToken, requireAdmin, (req, res)
   });
 });
 
-// 2b. Get All Registered Users for Admin Investigation
+// 2b. Get All Registered Students for Admin Management (Ban & Suspend)
 app.get('/api/admin/users', authenticateToken, requireAdmin, (req, res) => {
-  const sanitized = users.map(({ passwordHash, ...u }) => u);
+  const now = Date.now();
+  let updatedUsers = false;
+  users.forEach(u => {
+    if (u.isSuspended && u.suspensionExpiresAt && new Date(u.suspensionExpiresAt).getTime() <= now) {
+      u.isSuspended = false;
+      u.suspensionExpiresAt = null;
+      u.suspensionReason = undefined;
+      updatedUsers = true;
+    }
+  });
+  if (updatedUsers) {
+    saveUsers();
+  }
+
+  // Filter out any automated test bots, AI scrapers, or synthetic entities so ONLY real registered human students show up
+  const registeredStudents = users.filter(u => {
+    const isAiBot = (u as any).isBot || (u as any).isAi || 
+      u.email?.toLowerCase().includes('bot@') || 
+      u.name?.toLowerCase().includes('scriptbot') || 
+      u.name?.toLowerCase().includes('crawler') || 
+      u.name?.toLowerCase().includes('prober');
+    return !isAiBot;
+  });
+
+  const sanitized = registeredStudents.map(({ passwordHash, ...u }) => u);
   res.json({ success: true, users: sanitized, totalCount: sanitized.length });
 });
 
@@ -4274,6 +4354,31 @@ app.post('/api/admin/security/unban', authenticateToken, requireAdmin, (req, res
   });
 });
 
+// 5b. Admin Explicitly Lift Suspension Early
+app.post('/api/admin/security/unsuspend', authenticateToken, requireAdmin, (req, res) => {
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID is required' });
+  }
+
+  const target = users.find(u => u.id === userId);
+  if (!target) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  target.isSuspended = false;
+  target.suspensionReason = undefined;
+  target.suspensionExpiresAt = null;
+  target.suspensionOffenseLevel = undefined;
+  saveUsers();
+
+  res.json({
+    success: true,
+    message: `Suspension lifted! Student ${target.name} (${target.email}) is unsuspended and can resume study sessions immediately.`,
+    user: target
+  });
+});
+
 // 6. Admin Clear Security Strikes
 app.post('/api/admin/security/clear-strikes', authenticateToken, requireAdmin, (req, res) => {
   const { userId } = req.body;
@@ -4328,8 +4433,8 @@ app.post('/api/admin/security/simulate-incident', authenticateToken, requireAdmi
   } else if (threatType === 'payment_fraud') {
     offenseType = 'payment_fraud';
     severity = 'major';
-    details = `Simulated Threat: Duplicate forged OPay session ID submitted across multiple accounts with fabricated transfer receipt screenshot.`;
-    evidence = `SessionId: "110026260928140099882200" (Repeated across 3 IP nodes)`;
+    details = `Simulated Threat: Duplicate forged transfer receipt screenshot submitted across multiple accounts.`;
+    evidence = `ReceiptImageHash: "sha256:d8a9...b401" (Fabricated image reused across multiple accounts)`;
   } else {
     // cbt_speed_hack
     offenseType = 'cbt_speed_hack';
@@ -6915,7 +7020,17 @@ async function startServer() {
 
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`🛡️ StudyNaija Port Guard: Port ${PORT} is currently in use.`);
+      console.warn(`🛡️ StudyNaija Port Guard: Port ${PORT} is busy, retrying in 1 second...`);
+      setTimeout(() => {
+        try {
+          server.close();
+          server.listen(PORT, HOST, () => {
+            console.log(`🇳🇬 StudyNaija Server & 1v1 Arena WebSocket running at http://${HOST}:${PORT}`);
+          });
+        } catch (retryErr) {
+          console.error('Retry listen failed:', retryErr);
+        }
+      }, 1000);
     } else {
       console.error('🛡️ StudyNaija Server Error:', err);
     }
@@ -6935,4 +7050,6 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('🛡️ StudyNaija Global Crash Guard: Unhandled Promise Rejection safely intercepted:', reason);
 });
 
-startServer();
+startServer().catch(err => {
+  console.error('🛡️ StudyNaija Server Startup Error:', err);
+});

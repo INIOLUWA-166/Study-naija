@@ -543,7 +543,6 @@ export const api = {
       reference: string;
       senderAccountName?: string;
       senderBank?: string;
-      bankSessionId?: string;
       receiptScreenshotUrl?: string;
       planId?: string;
     } | string,
@@ -1158,6 +1157,15 @@ export const api = {
 
   unbanUserSecurity: async (userId: string): Promise<{ success: boolean; message: string; user: User }> => {
     const res = await fetch('/api/admin/security/unban', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ userId })
+    });
+    return await res.json();
+  },
+
+  unsuspendUserSecurity: async (userId: string): Promise<{ success: boolean; message: string; user: User }> => {
+    const res = await fetch('/api/admin/security/unsuspend', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })

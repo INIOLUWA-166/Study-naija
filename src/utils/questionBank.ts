@@ -835,8 +835,48 @@ export function generateFreshDrillQuestions(
         explanation: `Moles of CO₂ = ${mass} / 44 = ${moles} mol. Volume = ${moles} × 22.4 dm³ = ${vol} dm³.`,
         difficulty: targetDifficulty || 'Medium'
       });
+    } else if (subjectId === 'english') {
+      const concordOptions = [
+        {
+          q: 'Neither the school prefects nor the head boy ______ present at the general assembly yesterday.',
+          a: 'was',
+          dist: ['were', 'are', 'is'],
+          exp: 'According to the rule of proximity in subject-verb concord, when subjects are joined by "neither... nor", the verb agrees with the subject closest to it ("head boy" is singular and the past tense is required => "was").'
+        },
+        {
+          q: 'The Vice Chancellor, as well as the principal officers, ______ scheduled to attend the ceremony.',
+          a: 'is',
+          dist: ['are', 'were', 'have been'],
+          exp: 'Parenthetical phrases like "as well as" do not change the number of the subject ("Vice Chancellor" is singular => "is").'
+        },
+        {
+          q: 'Ten thousand naira ______ considered a fair price for the standard textbook package.',
+          a: 'is',
+          dist: ['are', 'were', 'have been'],
+          exp: 'Sums of money and specific quantities acting as a single unit or aggregate take a singular verb.'
+        }
+      ];
+      const selected = concordOptions[i % concordOptions.length];
+      generated.push({
+        id: uniqueId,
+        subjectId: 'english',
+        subjectName: 'English Language',
+        topic: 'Concord & Grammatical Structure',
+        examType: 'JAMB',
+        year: 2024,
+        question: selected.q,
+        options: {
+          A: selected.a,
+          B: selected.dist[0],
+          C: selected.dist[1],
+          D: selected.dist[2]
+        },
+        correctOption: 'A',
+        explanation: selected.exp,
+        difficulty: targetDifficulty || 'Medium'
+      });
     } else {
-      // General Nigerian syllabus question
+      // General curriculum inquiry
       generated.push({
         id: uniqueId,
         subjectId,
@@ -844,15 +884,15 @@ export function generateFreshDrillQuestions(
         topic: 'Core Examination Concepts',
         examType: 'JAMB',
         year: 2024,
-        question: `Which of the following principles forms the foundation of modern inquiry in ${subjectId}?`,
+        question: `In standard academic curriculum assessments for ${subjectId}, which approach ensures objective and valid analysis?`,
         options: {
-          A: 'Systematic empirical observation and reproducible experimental validation',
+          A: 'Systematic critical analysis grounded in verified curriculum syllabus texts',
           B: 'Speculative subjective assumptions without empirical evidence',
-          C: 'Arbitrary decree by local authorities',
-          D: 'Unverified folklore traditions'
+          C: 'Arbitrary decree by unauthorized sources',
+          D: 'Unverified hearsay'
         },
         correctOption: 'A',
-        explanation: 'Scientific and academic inquiries in curriculum examinations strictly demand empirical evidence, logical deduction, and reproducible validation.',
+        explanation: 'Academic syllabus assessments require objective evaluation grounded in established curriculum principles and verified textual evidence.',
         difficulty: targetDifficulty || 'Easy'
       });
     }

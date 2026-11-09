@@ -180,10 +180,7 @@ export const FlashChallengeModal: React.FC<FlashChallengeModalProps> = ({
 
     // CRITICAL: Scramble options and generate dynamic variants
     // Prevents copying of answers so leaderboard rankings are 100% fair
-    const randomizedQuestions = shuffledPool.map(q => {
-      const variant = createDynamicQuestionVariant(q, prng);
-      return shuffleQuestionOptionsFair(variant, prng);
-    });
+    const randomizedQuestions = shuffledPool.map(q => shuffleQuestionOptionsFair(q, prng));
 
     // Record the first question as asked
     if (randomizedQuestions.length > 0) {

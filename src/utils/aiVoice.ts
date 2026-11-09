@@ -687,6 +687,13 @@ export class AIVoiceEngine {
     // Refresh voice preference
     this.initVoices(true);
 
+    // Ensure audio thread is unpaused in Chrome/Safari
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.paused) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
+    }
+
     // Play subtle musical earcon asynchronously (non-blocking)
     this.playIntroChime();
 
@@ -788,8 +795,17 @@ export class AIVoiceEngine {
     return text;
   }
 
+  public speakFirstVisitorGreeting(onEnd?: () => void): string {
+    const text = `Welcome to Study Naija! I'm Sarah, your AI coach. Please sign in or create your student account to start practicing past JAMB and WAEC questions. Let's get started!`;
+    this.speak(text, onEnd);
+    return text;
+  }
+
   public speakWelcomeGreeting(studentName?: string, onEnd?: () => void): string {
-    const firstName = getStudentFirstName(studentName) || getStoredFirstName() || 'Scholar';
+    const firstName = getStudentFirstName(studentName) || getStoredFirstName() || '';
+    if (!firstName) {
+      return this.speakFirstVisitorGreeting(onEnd);
+    }
     const text = `Hey ${firstName}! Welcome to Study Naija! I'm Sarah, your AI coach. I'm super excited to help you ace your exams with top scores. Let's get started!`;
     this.speak(text, onEnd);
     markWelcomeAsSpoken();

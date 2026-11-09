@@ -137,7 +137,8 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   }, []);
 
   const handleToggleBookmark = async (qId: string) => {
-    const res = gamification.toggleBookmark(qId);
+    const found = questions.find(q => q.id === qId) || EXTENDED_QUESTIONS.find(q => q.id === qId) || currentQ;
+    const res = gamification.toggleBookmark(qId, found);
     setBookmarkedIds(res.allIds);
     try {
       await api.toggleBookmarkQuestion(qId, res.isBookmarked);
@@ -230,26 +231,43 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
         setSessionBatch(1);
       }
 
-      // Filter candidate pool to questions that have NOT been seen yet
-      let candidatePool = uniqueBank.filter(q => !currentSeen.has(q.id));
+      // Filter candidate pool to questions that have NOT been seen yet in this sitting
+      let unseenCandidates = uniqueBank.filter(q => !currentSeen.has(q.id));
 
-      // If unseen questions are fewer than 10, synthesize fresh unique questions with target difficulty
-      if (candidatePool.length < 10) {
-        const needed = 10 - candidatePool.length;
-        const allKnownKeys = new Set<string>();
-        questionMap.forEach((_, k) => allKnownKeys.add(k));
-        currentSeen.forEach(k => allKnownKeys.add(k));
-        const freshSynthesized = generateFreshDrillQuestions(
-          selectedSubjectId,
-          needed + 10,
-          allKnownKeys,
-          selectedDifficulty !== 'All' ? selectedDifficulty : undefined
-        );
-        freshSynthesized.forEach(q => {
-          questionMap.set(q.id, q);
-          uniqueBank.push(q);
-        });
-        candidatePool = [...candidatePool, ...freshSynthesized];
+      let chosenBatch: Question[] = [];
+
+      if (uniqueBank.length <= 10) {
+        // Small topic or subject bank: serve all available questions once
+        if (unseenCandidates.length > 0) {
+          chosenBatch = [...unseenCandidates];
+        } else {
+          // All questions for this topic have been answered, restart topic cycle
+          currentSeen = new Set<string>();
+          chosenBatch = [...uniqueBank];
+        }
+      } else {
+        // Standard bank (> 10 questions)
+        if (unseenCandidates.length >= 10) {
+          // Plenty of fresh unseen questions
+          chosenBatch = unseenCandidates.slice(0, 10);
+        } else if (unseenCandidates.length > 0) {
+          // Take all remaining unseen questions first
+          chosenBatch = [...unseenCandidates];
+          const needed = 10 - chosenBatch.length;
+          // Pick remaining from least recently seen questions (not in the current batch)
+          const seenList = uniqueBank.filter(q => currentSeen.has(q.id) && !chosenBatch.some(b => b.id === q.id));
+          // Reset seen status for the recycled subset
+          const recycled = seenList.slice(0, needed);
+          recycled.forEach(r => currentSeen.delete(r.id));
+          chosenBatch.push(...recycled);
+        } else {
+          // Entire subject bank completed! Reset tracker to begin next retention mastery cycle
+          currentSeen = new Set<string>();
+          try {
+            sessionStorage.removeItem(storageKey);
+          } catch {}
+          chosenBatch = uniqueBank.slice(0, 10);
+        }
       }
 
       // Seeded candidate shuffle using candidate's unique daily PRNG
@@ -258,20 +276,14 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
       const dailySeed = getStudentDailySeed(studentId, todayWat);
       const prng = createMulberry32(dailySeed + sessionBatch * 997);
 
-      const shuffledCandidates = [...candidatePool];
-      for (let i = shuffledCandidates.length - 1; i > 0; i--) {
+      const shuffledBatch = [...chosenBatch];
+      for (let i = shuffledBatch.length - 1; i > 0; i--) {
         const j = Math.floor(prng() * (i + 1));
-        [shuffledCandidates[i], shuffledCandidates[j]] = [shuffledCandidates[j], shuffledCandidates[i]];
+        [shuffledBatch[i], shuffledBatch[j]] = [shuffledBatch[j], shuffledBatch[i]];
       }
-      const chosenTen = shuffledCandidates.slice(0, 10);
 
-      // CRITICAL ANTI-COPYING FAIR PLAY REQUIREMENT:
-      // 1. "Randomise the question so nobody gets the same question any day so it avoids copying of answers"
-      // 2. "and even if the question is the same make the answers different"
-      const randomizedQuestions = chosenTen.map(q => {
-        const variant = createDynamicQuestionVariant(q, prng);
-        return shuffleQuestionOptionsFair(variant, prng);
-      });
+      // Anti-copying fair play: scramble option keys (A, B, C, D) fairly per student session
+      const randomizedQuestions = shuffledBatch.map(q => shuffleQuestionOptionsFair(q, prng));
 
       // Track these questions as seen
       const updatedSeen = new Set(currentSeen);

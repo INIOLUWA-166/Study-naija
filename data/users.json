@@ -1,7 +1,7 @@
 [
   {
     "id": "user-admin-inioluwa",
-    "name": "INIOLUWA JESULEJE MICHAEL",
+    "name": "INIOLUWA JESULEKE MICHEAL",
     "email": "luvkidjaja@gmail.com",
     "phone": "9166059676",
     "passwordHash": "$2b$10$HthISPzSgav5b86JNIKzDefNo86j11rVvGiHHDff.cJjsh2UpwI9K",
@@ -166,6 +166,11 @@
       "weakestSubject": "Mathematics"
     },
     "welcomeEmailSent": true,
-    "welcomeEmailSentAt": "2026-10-11T15:23:50.773Z"
+    "welcomeEmailSentAt": "2026-10-11T15:23:50.773Z",
+    "integrityScore": 100,
+    "verifiedSession": true,
+    "totalTabSwitches": 0,
+    "flaggedExamsCount": 0,
+    "verifiedExamsCount": 4
   }
 ]

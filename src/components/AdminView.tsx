@@ -32,7 +32,10 @@ import {
   ExternalLink,
   MessageSquare,
   Trophy,
-  CheckCheck
+  CheckCheck,
+  Ban,
+  UserX,
+  UserCheck
 } from 'lucide-react';
 import { User, Subject, Question, Article, AdminStats, PaymentRecord, MonthlyWinnerRecord, AdminNotification } from '../types';
 import { api } from '../services/api';
@@ -60,7 +63,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onUserUpgraded,
   onOpenGoogleWorkspace
 }) => {
-  const [activeTab, setActiveTab] = useState<'stats' | 'sentinel' | 'payments' | 'winners' | 'notifications' | 'banking' | 'questions' | 'subjects' | 'articles' | 'champions-ai'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'students' | 'sentinel' | 'payments' | 'winners' | 'notifications' | 'banking' | 'questions' | 'subjects' | 'articles' | 'champions-ai'>('stats');
   const [showCutscene, setShowCutscene] = useState<boolean>(true);
   const [isAdminFullscreenIntroOpen, setIsAdminFullscreenIntroOpen] = useState<boolean>(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -86,10 +89,21 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
   const [testEmailStatus, setTestEmailStatus] = useState<string | null>(null);
 
+  // Registered Human Students & Moderation (Permanent Ban / Suspension)
+  const [registeredStudents, setRegisteredStudents] = useState<User[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+  const [studentSearch, setStudentSearch] = useState<string>('');
+  const [studentFilter, setStudentFilter] = useState<'all' | 'active' | 'suspended' | 'banned'>('all');
+  const [selectedStudentForAction, setSelectedStudentForAction] = useState<User | null>(null);
+  const [studentActionType, setStudentActionType] = useState<'ban' | 'suspend' | 'unban' | 'unsuspend'>('ban');
+  const [suspendDurationHours, setSuspendDurationHours] = useState<number>(24);
+  const [actionReason, setActionReason] = useState<string>('Violation of academic integrity & platform guidelines');
+  const [processingStudentId, setProcessingStudentId] = useState<string | null>(null);
+
   const [paymentConfig, setPaymentConfig] = useState({
     bankName: 'OPay (PayCom)',
     accountNumber: '9166059676',
-    accountName: 'INIOLUWA JESULEJE MICHAEL',
+    accountName: 'INIOLUWA JESULEKE MICHEAL',
     instructions: ''
   });
   const [isEditingPayment, setIsEditingPayment] = useState(false);
@@ -102,7 +116,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
     title: string;
     sender: string;
     amount: number;
-    sessionId?: string;
   } | null>(null);
 
   // Modal / Form States
@@ -138,6 +151,87 @@ export const AdminView: React.FC<AdminViewProps> = ({
     readTime: '5 min read',
     tags: 'JAMB, CBT, Revision'
   });
+
+  // Dedicated fetch for registered students list (real human students only)
+  const fetchRegisteredStudents = async () => {
+    setLoadingStudents(true);
+    try {
+      const res = await api.getAdminUsers();
+      if (res && res.users) {
+        setRegisteredStudents(res.users);
+      }
+    } catch (err) {
+      console.warn('Could not load registered students:', err);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // Student moderation actions
+  const handleBanStudent = async (studentId: string, reason: string) => {
+    setProcessingStudentId(studentId);
+    try {
+      const res = await api.banUserSecurity(studentId, reason);
+      if (res && res.success) {
+        setFeedback(`Student account ${res.user?.name || studentId} has been banned permanently.`);
+        setRegisteredStudents(prev => prev.map(u => u.id === studentId ? { ...u, isBanned: true, banReason: reason, isSuspended: false, suspensionExpiresAt: null } : u));
+        setSelectedStudentForAction(null);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to ban student');
+    } finally {
+      setProcessingStudentId(null);
+    }
+  };
+
+  const handleSuspendStudent = async (studentId: string, durationHours: number, reason: string) => {
+    setProcessingStudentId(studentId);
+    try {
+      const res = await api.suspendUserSecurity(studentId, durationHours, reason);
+      if (res && res.success) {
+        setFeedback(`Student account ${res.user?.name || studentId} has been suspended for ${durationHours} hours.`);
+        const expiresAt = new Date(Date.now() + durationHours * 3600 * 1000).toISOString();
+        setRegisteredStudents(prev => prev.map(u => u.id === studentId ? { ...u, isSuspended: true, suspensionExpiresAt: expiresAt, suspensionReason: reason, isBanned: false } : u));
+        setSelectedStudentForAction(null);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to suspend student');
+    } finally {
+      setProcessingStudentId(null);
+    }
+  };
+
+  const handleUnbanStudent = async (studentId: string) => {
+    setProcessingStudentId(studentId);
+    try {
+      const res = await api.unbanUserSecurity(studentId);
+      if (res && res.success) {
+        setFeedback(`Sanction lifted! Student account ${res.user?.name || studentId} is restored to active status.`);
+        setRegisteredStudents(prev => prev.map(u => u.id === studentId ? { ...u, isBanned: false, isSuspended: false, banReason: undefined, suspensionReason: undefined, suspensionExpiresAt: null } : u));
+        setSelectedStudentForAction(null);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to unban student');
+    } finally {
+      setProcessingStudentId(null);
+    }
+  };
+
+  const handleUnsuspendStudent = async (studentId: string) => {
+    setProcessingStudentId(studentId);
+    try {
+      const res = await api.unsuspendUserSecurity(studentId);
+      if (res && res.success) {
+        setFeedback(`Suspension lifted! Student account ${res.user?.name || studentId} is restored to active status.`);
+        setRegisteredStudents(prev => prev.map(u => u.id === studentId ? { ...u, isSuspended: false, suspensionReason: undefined, suspensionExpiresAt: null } : u));
+        setSelectedStudentForAction(null);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to unsuspend student');
+    } finally {
+      setProcessingStudentId(null);
+    }
+  };
 
   // Load Admin Data
   const loadData = async () => {
@@ -182,6 +276,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
         }
       } catch (nErr) {
         console.warn('Could not fetch admin notifications:', nErr);
+      }
+      try {
+        const usersRes = await api.getAdminUsers();
+        if (usersRes && usersRes.users) {
+          setRegisteredStudents(usersRes.users);
+        }
+      } catch (uErr) {
+        console.warn('Could not fetch registered students:', uErr);
       }
     } catch {
       // Handled
@@ -649,6 +751,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
         {[
           { id: 'stats', label: 'Platform Statistics', icon: BarChart3 },
           { 
+            id: 'students', 
+            label: `👥 Registered Students & Moderation (${registeredStudents.length})`, 
+            icon: Users,
+            pendingBadge: registeredStudents.filter(u => u.isBanned || u.isSuspended).length
+          },
+          { 
             id: 'sentinel', 
             label: '🛡️ Sentinel AI (Anti-Cheat & Hacker Bans)', 
             icon: ShieldAlert 
@@ -789,6 +897,332 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: REGISTERED STUDENTS & BAN/SUSPEND MODERATION */}
+      {activeTab === 'students' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Card */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-slate-700/60">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-2xl">👥</span>
+                <h2 className="text-xl sm:text-2xl font-black font-['Outfit']">
+                  Registered Students & Account Moderation
+                </h2>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-mono font-bold">
+                  Real Humans Only • No AI Bots
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+                Permanent registry of every registered candidate across Nigeria. You have authoritative administrative power to <strong>permanently ban</strong> or <strong>temporarily suspend</strong> any student account directly next to their name.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <button
+                onClick={fetchRegisteredStudents}
+                disabled={loadingStudents}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-white/15 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingStudents ? 'animate-spin' : ''}`} />
+                <span>Refresh Students</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Metric Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
+              <div className="text-[11px] font-bold text-slate-400 uppercase">Total Students</div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1 font-['Outfit']">
+                {registeredStudents.length}
+              </div>
+              <span className="text-[10px] text-slate-500">Excluding bots</span>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-200 shadow-xs bg-emerald-50/20">
+              <div className="text-[11px] font-bold text-emerald-700 uppercase">Active Scholars</div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-1 font-['Outfit']">
+                {registeredStudents.filter(u => !u.isBanned && !u.isSuspended).length}
+              </div>
+              <span className="text-[10px] text-emerald-700 font-semibold">In good standing</span>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-amber-200 shadow-xs bg-amber-50/20">
+              <div className="text-[11px] font-bold text-amber-700 uppercase">Suspended</div>
+              <div className="text-2xl sm:text-3xl font-black text-amber-600 mt-1 font-['Outfit']">
+                {registeredStudents.filter(u => u.isSuspended).length}
+              </div>
+              <span className="text-[10px] text-amber-700 font-semibold">Temporary cooldown</span>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-red-200 shadow-xs bg-red-50/20">
+              <div className="text-[11px] font-bold text-red-700 uppercase">Permanently Banned</div>
+              <div className="text-2xl sm:text-3xl font-black text-red-600 mt-1 font-['Outfit']">
+                {registeredStudents.filter(u => u.isBanned).length}
+              </div>
+              <span className="text-[10px] text-red-700 font-semibold">Access revoked</span>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search students by name, email address, or phone number..."
+                value={studentSearch}
+                onChange={e => setStudentSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-emerald-500"
+              />
+              {studentSearch && (
+                <button
+                  onClick={() => setStudentSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+              {[
+                { id: 'all', label: `All (${registeredStudents.length})` },
+                { id: 'active', label: `Active (${registeredStudents.filter(u => !u.isBanned && !u.isSuspended).length})` },
+                { id: 'suspended', label: `Suspended (${registeredStudents.filter(u => u.isSuspended).length})` },
+                { id: 'banned', label: `Banned (${registeredStudents.filter(u => u.isBanned).length})` }
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setStudentFilter(f.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    studentFilter === f.id
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Students Roster */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+            {registeredStudents.length === 0 ? (
+              <div className="p-12 text-center space-y-3">
+                <Users className="w-12 h-12 text-slate-300 mx-auto" />
+                <h3 className="text-base font-bold text-slate-800">No Registered Students Found</h3>
+                <p className="text-xs text-slate-500">When real students sign up, they are permanently recorded here.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {registeredStudents
+                  .filter(s => {
+                    const q = studentSearch.toLowerCase().trim();
+                    const matchesSearch = !q ||
+                      s.name?.toLowerCase().includes(q) ||
+                      s.email?.toLowerCase().includes(q) ||
+                      (s as any).phone?.toLowerCase().includes(q) ||
+                      (s as any).phoneNumber?.toLowerCase().includes(q);
+                    if (!matchesSearch) return false;
+                    if (studentFilter === 'active') return !s.isBanned && !s.isSuspended;
+                    if (studentFilter === 'suspended') return s.isSuspended;
+                    if (studentFilter === 'banned') return s.isBanned;
+                    return true;
+                  })
+                  .map(student => {
+                    const isProcessing = processingStudentId === student.id;
+                    const isTargetAdmin = student.role === 'admin' || student.email?.toLowerCase() === 'luvkidjaja@gmail.com';
+                    const initials = (student.name || 'Student')
+                      .split(' ')
+                      .map(p => p[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase();
+
+                    return (
+                      <div
+                        key={student.id}
+                        className={`p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors ${
+                          student.isBanned
+                            ? 'bg-red-50/30 hover:bg-red-50/50'
+                            : student.isSuspended
+                            ? 'bg-amber-50/30 hover:bg-amber-50/50'
+                            : 'hover:bg-slate-50/80'
+                        }`}
+                      >
+                        {/* Student Details */}
+                        <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 ${
+                            student.isBanned
+                              ? 'bg-red-100 text-red-700 border border-red-300'
+                              : student.isSuspended
+                              ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {initials}
+                          </div>
+
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-sm font-black text-slate-900 font-['Outfit'] truncate">
+                                {student.name}
+                              </h3>
+                              {isTargetAdmin && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                                  System Admin
+                                </span>
+                              )}
+                              {student.isBanned ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white flex items-center gap-1 shadow-2xs">
+                                  <Ban className="w-3 h-3" />
+                                  <span>Banned Permanently</span>
+                                </span>
+                              ) : student.isSuspended ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white flex items-center gap-1 shadow-2xs">
+                                  <Clock className="w-3 h-3" />
+                                  <span>Suspended</span>
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>Active Student</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-medium">
+                              <span className="flex items-center gap-1 text-slate-700">
+                                <Mail className="w-3 h-3 text-slate-400" />
+                                {student.email}
+                              </span>
+                              {((student as any).phoneNumber || (student as any).phone) && (
+                                <span className="flex items-center gap-1 text-slate-600">
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  {(student as any).phoneNumber || (student as any).phone}
+                                </span>
+                              )}
+                              <span>• Target: <strong>{student.targetExam || 'JAMB'}</strong></span>
+                              <span>• Level: <strong>{student.educationLevel || 'Secondary'}</strong></span>
+                              <span>• Joined: {new Date(student.createdAt || (student as any).joined || Date.now()).toLocaleDateString()}</span>
+                            </div>
+
+                            {/* Sanction Details if penalized */}
+                            {(student.isBanned && student.banReason) && (
+                              <div className="text-[11px] text-red-700 bg-red-100/60 border border-red-200 px-2.5 py-1 rounded-lg mt-1 inline-flex items-center gap-1.5 font-medium">
+                                <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                                <span>Ban Reason: {student.banReason}</span>
+                              </div>
+                            )}
+
+                            {(student.isSuspended && (student.suspensionExpiresAt || student.suspensionReason)) && (
+                              <div className="text-[11px] text-amber-800 bg-amber-100/60 border border-amber-200 px-2.5 py-1 rounded-lg mt-1 inline-flex items-center gap-1.5 font-medium">
+                                <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                                <span>
+                                  Suspended: {student.suspensionReason || 'Academic Cooldown'}
+                                  {student.suspensionExpiresAt && ` (Lifts: ${new Date(student.suspensionExpiresAt).toLocaleString()})`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Direct Moderation Action Buttons next to their name */}
+                        <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                          {isTargetAdmin ? (
+                            <span className="text-xs text-slate-400 font-semibold italic px-3 py-1 bg-slate-100 rounded-lg">
+                              Admin Protected
+                            </span>
+                          ) : (
+                            <>
+                              {/* Option to Suspend */}
+                              {!student.isBanned && !student.isSuspended && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedStudentForAction(student);
+                                    setStudentActionType('suspend');
+                                    setSuspendDurationHours(24);
+                                    setActionReason('Academic integrity check / CBT speed violation');
+                                  }}
+                                  disabled={isProcessing}
+                                  className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                                  title="Temporarily suspend student account for a chosen time period"
+                                >
+                                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>Suspend</span>
+                                </button>
+                              )}
+
+                              {/* Option to Ban Permanently */}
+                              {!student.isBanned && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedStudentForAction(student);
+                                    setStudentActionType('ban');
+                                    setActionReason('Violation of academic integrity & platform guidelines');
+                                  }}
+                                  disabled={isProcessing}
+                                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                                  title="Permanently ban student from logging in and accessing CBT"
+                                >
+                                  <Ban className="w-3.5 h-3.5 text-red-600" />
+                                  <span>Ban Student</span>
+                                </button>
+                              )}
+
+                              {/* Option to Unban if Banned */}
+                              {student.isBanned && (
+                                <button
+                                  onClick={() => handleUnbanStudent(student.id)}
+                                  disabled={isProcessing}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                                  title="Lift permanent ban immediately"
+                                >
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                  <span>Unban Account</span>
+                                </button>
+                              )}
+
+                              {/* Option to Unsuspend if Suspended */}
+                              {student.isSuspended && (
+                                <>
+                                  <button
+                                    onClick={() => handleUnsuspendStudent(student.id)}
+                                    disabled={isProcessing}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                                    title="Lift suspension immediately and restore access"
+                                  >
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                    <span>Unsuspend Account</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedStudentForAction(student);
+                                      setStudentActionType('ban');
+                                      setActionReason('Repeated violations / escalated disciplinary ban');
+                                    }}
+                                    disabled={isProcessing}
+                                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                                    title="Upgrade to permanent ban"
+                                  >
+                                    <Ban className="w-3.5 h-3.5 text-red-600" />
+                                    <span>Ban</span>
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1839,24 +2273,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                   <strong className="text-slate-900 truncate block">{payment.senderBank || 'Bank Transfer'}</strong>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase text-slate-400 font-bold block">NIP Session / Tx ID</span>
-                                  <div className="flex items-center gap-1">
-                                    <strong className="text-slate-900 font-mono text-[10px] truncate max-w-[120px]" title={payment.bankSessionId || 'N/A'}>
-                                      {payment.bankSessionId || 'Not provided'}
-                                    </strong>
-                                    {payment.bankSessionId && (
-                                      <button
-                                        type="button"
-                                        onClick={() => copyBankToClipboard(payment.bankSessionId!, 'sess-' + payment.reference)}
-                                        className="text-[9px] text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 cursor-pointer font-bold"
-                                        title="Copy Session ID for OPay Statement lookup"
-                                      >
-                                        {copiedBankField === 'sess-' + payment.reference ? 'Copied' : 'Copy'}
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                <div>
                                   <span className="text-[10px] uppercase text-slate-400 font-bold block">Submitted At</span>
                                   <span className="text-slate-600">
                                     {new Date(payment.submittedAt || payment.createdAt).toLocaleString()}
@@ -1873,8 +2289,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                       url: payment.receiptScreenshotUrl!,
                                       title: `Transfer Receipt: ${payment.userName} (${payment.planName})`,
                                       sender: payment.senderAccountName || payment.userName,
-                                      amount: payment.amount,
-                                      sessionId: payment.bankSessionId
+                                      amount: payment.amount
                                     })}
                                     className="inline-flex items-center gap-2 p-1.5 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
                                   >
@@ -2136,7 +2551,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       value={paymentConfig.accountName}
                       onChange={e => setPaymentConfig({ ...paymentConfig, accountName: e.target.value })}
                       className="w-full p-2.5 border border-slate-300 rounded-xl font-bold bg-white"
-                      placeholder="e.g. INIOLUWA JESULEJE MICHAEL"
+                      placeholder="e.g. INIOLUWA JESULEKE MICHEAL"
                     />
                   </div>
                 </div>
@@ -2546,22 +2961,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </button>
             </div>
 
-            {previewReceiptModal.sessionId && (
-              <div className="p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-xs font-mono flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase text-emerald-800 font-sans font-bold block">NIP Session / Transaction ID</span>
-                  <strong className="text-emerald-950">{previewReceiptModal.sessionId}</strong>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => copyBankToClipboard(previewReceiptModal.sessionId!, 'modal-sess')}
-                  className="text-[10px] text-emerald-700 bg-emerald-100/70 px-2 py-1 rounded border border-emerald-300 font-sans font-bold cursor-pointer hover:bg-emerald-200"
-                >
-                  {copiedBankField === 'modal-sess' ? 'Copied!' : 'Copy ID'}
-                </button>
-              </div>
-            )}
-
             <div className="max-h-[60vh] overflow-auto rounded-xl border border-slate-200 bg-slate-900/5 flex items-center justify-center p-2">
               <img
                 src={previewReceiptModal.url}
@@ -2578,6 +2977,243 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl cursor-pointer"
               >
                 Close Receipt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STUDENT MODERATION MODAL (BAN / SUSPEND) */}
+      {selectedStudentForAction && (
+        <div
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={e => {
+            if (e.target === e.currentTarget) setSelectedStudentForAction(null);
+          }}
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-slate-800 animate-in fade-in zoom-in-95 space-y-5">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white ${
+                  studentActionType === 'ban' ? 'bg-red-600' : 'bg-amber-500'
+                }`}>
+                  {studentActionType === 'ban' ? <Ban className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 font-['Outfit']">
+                    {studentActionType === 'ban' ? 'Ban Student Account' : 'Suspend Student Account'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Disciplinary action against candidate
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStudentForAction(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Student Identity Card */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1">
+              <div className="font-bold text-slate-900 text-sm">
+                {selectedStudentForAction.name}
+              </div>
+              <div className="text-slate-500 flex items-center gap-1.5">
+                <Mail className="w-3 h-3 text-slate-400" />
+                <span>{selectedStudentForAction.email}</span>
+              </div>
+              {((selectedStudentForAction as any).phoneNumber || (selectedStudentForAction as any).phone) && (
+                <div className="text-slate-500 flex items-center gap-1.5">
+                  <Phone className="w-3 h-3 text-slate-400" />
+                  <span>{(selectedStudentForAction as any).phoneNumber || (selectedStudentForAction as any).phone}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Type Selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">Choose Moderation Action</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStudentActionType('ban')}
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    studentActionType === 'ban'
+                      ? 'bg-red-600 text-white border-red-700 shadow-xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Ban</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentActionType('suspend')}
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    studentActionType === 'suspend'
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Suspend</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentActionType('unban')}
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    studentActionType === 'unban'
+                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Unban</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentActionType('unsuspend')}
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    studentActionType === 'unsuspend'
+                      ? 'bg-teal-600 text-white border-teal-700 shadow-xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Unsuspend</span>
+                </button>
+              </div>
+            </div>
+
+            {/* If Suspension: Duration Selector */}
+            {studentActionType === 'suspend' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Suspension Duration</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { hours: 24, label: '24 Hours (1 Day)' },
+                    { hours: 72, label: '72 Hours (3 Days)' },
+                    { hours: 168, label: '7 Days (1 Week)' },
+                    { hours: 720, label: '30 Days (1 Month)' }
+                  ].map(d => (
+                    <button
+                      key={d.hours}
+                      type="button"
+                      onClick={() => setSuspendDurationHours(d.hours)}
+                      className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center ${
+                        suspendDurationHours === d.hours
+                          ? 'bg-slate-900 text-white border-slate-950'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reason Presets & Input (only for Ban and Suspend) */}
+            {(studentActionType === 'ban' || studentActionType === 'suspend') && (
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700">Reason for Sanction</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Academic dishonesty / CBT speed hack',
+                    'Inappropriate behavior / offensive conduct',
+                    'Fake transfer receipt submission',
+                    'Multiple accounts / unauthorized sharing',
+                    'Disciplinary violation'
+                  ].map(r => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setActionReason(r)}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer border ${
+                        actionReason === r
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={actionReason}
+                  onChange={e => setActionReason(e.target.value)}
+                  rows={2}
+                  placeholder="Enter detailed reason (shown to student when they attempt to log in)..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-emerald-500"
+                />
+              </div>
+            )}
+
+            {/* Warning / Informational Message */}
+            <div className={`p-3 rounded-xl border text-xs ${
+              studentActionType === 'ban'
+                ? 'bg-red-50 text-red-800 border-red-200'
+                : studentActionType === 'suspend'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            }`}>
+              <strong>Action Effect:</strong> {
+                studentActionType === 'ban'
+                  ? 'The candidate will be logged out and permanently blocked from CBT drills, mock exams, and rankings.'
+                  : studentActionType === 'suspend'
+                  ? `The candidate will be locked out for ${suspendDurationHours} hours and automatically restored once expired.`
+                  : studentActionType === 'unban'
+                  ? 'Permanent ban will be immediately lifted and the student will regain full platform access with clean standing.'
+                  : 'Active suspension will be immediately cancelled and the student can resume taking tests right now.'
+              }
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedStudentForAction(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(processingStudentId)}
+                onClick={() => {
+                  if (studentActionType === 'ban') {
+                    handleBanStudent(selectedStudentForAction.id, actionReason);
+                  } else if (studentActionType === 'suspend') {
+                    handleSuspendStudent(selectedStudentForAction.id, suspendDurationHours, actionReason);
+                  } else if (studentActionType === 'unban') {
+                    handleUnbanStudent(selectedStudentForAction.id);
+                  } else if (studentActionType === 'unsuspend') {
+                    handleUnsuspendStudent(selectedStudentForAction.id);
+                  }
+                }}
+                className={`px-5 py-2 text-white font-bold text-xs rounded-xl cursor-pointer transition shadow-sm flex items-center gap-1.5 disabled:opacity-50 ${
+                  studentActionType === 'ban'
+                    ? 'bg-red-600 hover:bg-red-500'
+                    : studentActionType === 'suspend'
+                    ? 'bg-amber-600 hover:bg-amber-500'
+                    : studentActionType === 'unban'
+                    ? 'bg-emerald-600 hover:bg-emerald-500'
+                    : 'bg-teal-600 hover:bg-teal-500'
+                }`}
+              >
+                {studentActionType === 'ban' && <Ban className="w-3.5 h-3.5" />}
+                {studentActionType === 'suspend' && <Clock className="w-3.5 h-3.5" />}
+                {(studentActionType === 'unban' || studentActionType === 'unsuspend') && <UserCheck className="w-3.5 h-3.5" />}
+                <span>
+                  {studentActionType === 'ban' && 'Confirm Permanent Ban'}
+                  {studentActionType === 'suspend' && `Confirm ${suspendDurationHours}h Suspension`}
+                  {studentActionType === 'unban' && 'Confirm Unban & Restore'}
+                  {studentActionType === 'unsuspend' && 'Confirm Unsuspend & Restore'}
+                </span>
               </button>
             </div>
           </div>

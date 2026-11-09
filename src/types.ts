@@ -439,7 +439,6 @@ export interface PaymentRecord {
   accountName: string;
   senderAccountName?: string;
   senderBank?: string;
-  bankSessionId?: string;
   receiptScreenshotUrl?: string;
   isTrollFlagged?: boolean;
   status: 'pending' | 'approved' | 'rejected';

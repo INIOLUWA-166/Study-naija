@@ -2,6 +2,8 @@ import { Subject, Question, Article, PricingPlan, EducationLevel } from './types
 import { PRIMARY_SUBJECTS, UNIVERSITY_SUBJECTS, PRIMARY_QUESTIONS, UNIVERSITY_QUESTIONS } from './data/educationQuestions';
 import { EXTENDED_QUESTIONS } from './utils/questionBank';
 import { ADDITIONAL_SECONDARY_SUBJECTS, ADDITIONAL_SUBJECT_QUESTIONS } from './data/expandedSubjectsQuestions';
+import { AUTHENTIC_JAMB_PAST_QUESTIONS } from './data/pastJambQuestionsBank';
+import { MASSIVE_PAST_QUESTIONS_BANK } from './data/massivePastQuestionsBank';
 
 export const SECONDARY_SUBJECTS: Subject[] = [
   {
@@ -1637,6 +1639,8 @@ export const INITIAL_QUESTIONS: Question[] = [
   ...SECONDARY_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
   ...ADDITIONAL_SUBJECT_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
   ...EXTENDED_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
+  ...AUTHENTIC_JAMB_PAST_QUESTIONS.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
+  ...MASSIVE_PAST_QUESTIONS_BANK.map(q => ({ ...q, educationLevel: (q.educationLevel || 'secondary') as EducationLevel })),
   ...PRIMARY_QUESTIONS,
   ...UNIVERSITY_QUESTIONS
 ];

@@ -29,7 +29,8 @@ import {
   Gift,
   Crown,
   Globe,
-  Newspaper
+  Newspaper,
+  Calendar
 } from 'lucide-react';
 import { Subject, User, PredictedScoreData } from '../types';
 import { AdBanner } from './AdBanner';
@@ -419,24 +420,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
 
-          {/* Card 4: Search Past Questions Archive */}
+          {/* Card 4: Daily Study Planner */}
           <div 
-            onClick={() => onNavigate('question-grabber')}
-            className="group bg-gradient-to-b from-amber-950/90 via-slate-900 to-amber-950/70 rounded-3xl p-6 border-2 border-amber-400/60 hover:border-amber-300 shadow-md hover:shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
+            onClick={() => onNavigate('dashboard', { tab: 'study-planner' })}
+            className="group bg-gradient-to-b from-cyan-950/90 via-slate-900 to-teal-950/70 rounded-3xl p-6 border-2 border-cyan-400/60 hover:border-cyan-300 shadow-md hover:shadow-xl hover:shadow-cyan-500/20 transition-all cursor-pointer flex flex-col justify-between text-white"
           >
             <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                <Search className="w-6 h-6 stroke-[2.5]" />
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-500 text-slate-950 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+                <Calendar className="w-6 h-6 stroke-[2.5]" />
               </div>
-              <h3 className="text-lg font-black text-amber-300 group-hover:text-yellow-200 transition-colors">
-                Past Questions Search
+              <h3 className="text-lg font-black text-cyan-300 group-hover:text-teal-200 transition-colors">
+                Daily Study Planner
               </h3>
-              <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
-                Search over 2,500+ past questions by keyword, topic, or year with instant answers and solutions.
+              <p className="text-xs text-cyan-100/90 leading-relaxed font-medium">
+                Schedule specific syllabus topics throughout your day and track your daily completion progress.
               </p>
             </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-amber-400 group-hover:text-amber-300 group-hover:gap-1.5 transition-all">
-              <span>Search Archive</span>
+            <div className="pt-4 flex items-center text-xs font-bold text-cyan-400 group-hover:text-cyan-300 group-hover:gap-1.5 transition-all">
+              <span>Open Study Planner</span>
               <ArrowRight className="w-4 h-4 ml-1" />
             </div>
           </div>
@@ -527,19 +528,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 NECO SSCE
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white">
-              Search & Browse Past JAMB Questions
+            <h2 className="text-xl sm:text-2xl font-black font-['Outfit'] text-white flex items-center gap-2">
+              <span>Daily Study Planner & Topic Schedule</span>
+              <span>📅</span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Search over <strong>2,500+ official JAMB UTME & WAEC past questions</strong> directly on screen! Filter by year (2012–2026), subject, and topic with instant multiple-choice answers, marking schemes, and step-by-step teacher solutions.
+              Schedule your daily revision objectives topic-by-topic across Mathematics, English, Sciences, and Arts. Set morning, afternoon, and evening targets with real-time completion tracking throughout your day!
             </p>
           </div>
           <button
-            onClick={() => onNavigate('question-grabber')}
+            onClick={() => onNavigate('dashboard', { tab: 'study-planner' })}
             className="w-full md:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-xl hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shrink-0"
           >
-            <Search className="w-4 h-4" />
-            <span>Search Past Questions →</span>
+            <Calendar className="w-4 h-4" />
+            <span>Open Study Planner →</span>
           </button>
         </div>
       </section>

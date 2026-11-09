@@ -1,4 +1,4 @@
-import { User, StreakInfo, CalendarStreakDay, DailyStudyGoal, PracticeTestRecord } from '../types';
+import { User, StreakInfo, CalendarStreakDay, DailyStudyGoal, PracticeTestRecord, Question } from '../types';
 import { triggerStreakMilestoneConfetti, isStreakMilestone, getStreakMilestoneTitle } from './confettiCelebration';
 
 export interface RankInfo {
@@ -102,6 +102,7 @@ const STORAGE_XP_KEY = 'studynaija_student_xp';
 const STORAGE_STREAK_KEY = 'studynaija_student_streak';
 const STORAGE_LAST_ACTIVE_KEY = 'studynaija_student_last_active';
 const STORAGE_SAVED_QUESTIONS_KEY = 'studynaija_saved_questions';
+const STORAGE_SAVED_FULL_QUESTIONS_KEY = 'studynaija_saved_full_questions_store';
 const STORAGE_FLASH_BEST_KEY = 'studynaija_flash_best';
 const STORAGE_LONGEST_STREAK_KEY = 'studynaija_longest_streak';
 const STORAGE_TOTAL_SESSIONS_KEY = 'studynaija_total_practice_sessions';
@@ -544,7 +545,51 @@ export const gamification = {
     }
   },
 
-  toggleBookmark: (questionId: string): { isBookmarked: boolean; allIds: string[] } => {
+  getSavedFullQuestions: (): Question[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(STORAGE_SAVED_FULL_QUESTIONS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  saveFullQuestion: (question: Question): void => {
+    if (typeof window === 'undefined' || !question || !question.id) return;
+    try {
+      const current = gamification.getSavedFullQuestions();
+      const filtered = current.filter(q => q.id !== question.id);
+      filtered.unshift(question);
+      localStorage.setItem(STORAGE_SAVED_FULL_QUESTIONS_KEY, JSON.stringify(filtered));
+
+      const ids = gamification.getBookmarkedIds();
+      if (!ids.includes(question.id)) {
+        ids.push(question.id);
+        localStorage.setItem(STORAGE_SAVED_QUESTIONS_KEY, JSON.stringify(ids));
+      }
+      window.dispatchEvent(new CustomEvent('studynaija_saved_questions_updated', { detail: { questionId: question.id, total: filtered.length } }));
+    } catch (e) {
+      console.warn('Failed to save question locally:', e);
+    }
+  },
+
+  removeSavedFullQuestion: (questionId: string): void => {
+    if (typeof window === 'undefined' || !questionId) return;
+    try {
+      const current = gamification.getSavedFullQuestions();
+      const filtered = current.filter(q => q.id !== questionId);
+      localStorage.setItem(STORAGE_SAVED_FULL_QUESTIONS_KEY, JSON.stringify(filtered));
+
+      const ids = gamification.getBookmarkedIds().filter(id => id !== questionId);
+      localStorage.setItem(STORAGE_SAVED_QUESTIONS_KEY, JSON.stringify(ids));
+      window.dispatchEvent(new CustomEvent('studynaija_saved_questions_updated', { detail: { questionId, total: filtered.length } }));
+    } catch (e) {
+      console.warn('Failed to remove saved question locally:', e);
+    }
+  },
+
+  toggleBookmark: (questionId: string, fullQuestion?: Question): { isBookmarked: boolean; allIds: string[] } => {
     const list = gamification.getBookmarkedIds();
     const index = list.indexOf(questionId);
     let isBookmarked = false;
@@ -552,12 +597,17 @@ export const gamification = {
     if (index >= 0) {
       list.splice(index, 1);
       isBookmarked = false;
+      gamification.removeSavedFullQuestion(questionId);
     } else {
       list.push(questionId);
       isBookmarked = true;
+      if (fullQuestion) {
+        gamification.saveFullQuestion(fullQuestion);
+      }
     }
 
     localStorage.setItem(STORAGE_SAVED_QUESTIONS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('studynaija_saved_questions_updated', { detail: { questionId, isBookmarked, allIds: list } }));
     return { isBookmarked, allIds: list };
   },
 

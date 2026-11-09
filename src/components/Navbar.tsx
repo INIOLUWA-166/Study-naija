@@ -105,11 +105,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'home', label: 'Home', icon: BookOpen },
     { id: 'subjects', label: 'Subjects', icon: BookOpen },
     { id: 'practice', label: 'Practice', icon: FileCheck2 },
-    { id: 'question-grabber', label: 'Past Questions', icon: BookOpen, badge: 'JAMB', highlight: true },
     { id: 'news-agent', label: 'News & Fact-Checker', icon: Newspaper, badge: 'LIVE', highlight: true },
     { id: 'search-pad', label: 'Search Pad', icon: Search },
     { id: 'ai-tutor', label: 'Naija AI', icon: Sparkles, badge: 'AI' },
     { id: 'mock-exam', label: 'Mock Exam', icon: Timer },
+    { id: 'novel-study', label: 'JAMB Novel', icon: BookMarked, badge: '10 Qs', highlight: true },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'stories', label: 'Story Books', icon: BookOpen, badge: 'READ', highlight: true },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'TOP' },
@@ -656,14 +656,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
             ) : (
-              <button
-                id="navbar-login-btn"
-                onClick={onOpenAuth}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow-xs hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <UserIcon className="w-3.5 h-3.5" />
-                <span>Log In / Sign Up</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  id="navbar-login-btn"
+                  onClick={onOpenAuth}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer border border-emerald-400/40"
+                >
+                  <UserIcon className="w-3.5 h-3.5" />
+                  <span>Log In / Sign Up</span>
+                  <span className="hidden sm:inline-block px-1.5 py-0.5 text-[9px] font-black bg-amber-400 text-slate-950 rounded-full animate-pulse uppercase tracking-wider">
+                    New User?
+                  </span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -924,7 +929,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="w-full py-2 text-xs font-bold text-rose-400 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  Log Out
+                  <span>Log Out</span>
                 </button>
               </div>
             ) : (
@@ -934,10 +939,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setMobileMenuOpen(false);
                     onOpenAuth();
                   }}
-                  className="w-full py-2.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/30"
                 >
                   <UserIcon className="w-4 h-4" />
-                  <span>Student Sign In / Create Account</span>
+                  <span>Log In / Create Account (New User)</span>
                 </button>
                 <button
                   onClick={() => {

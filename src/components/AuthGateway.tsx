@@ -20,11 +20,22 @@ import {
   X,
   Smartphone,
   KeyRound,
-  UserCheck
+  UserCheck,
+  Volume2,
+  VolumeX,
+  Mic
 } from 'lucide-react';
 import { api, authStorage, SavedCredentials } from '../services/api';
 import { User } from '../types';
-import { aiVoice, getStudentFirstName, setStoredFirstName, markWelcomeAsSpoken } from '../utils/aiVoice';
+import { 
+  aiVoice, 
+  getStudentFirstName, 
+  setStoredFirstName, 
+  markWelcomeAsSpoken,
+  getVoicePersona,
+  setVoicePersona,
+  VoicePersona
+} from '../utils/aiVoice';
 import { studentNotificationManager } from '../utils/studentNotificationManager';
 import { signInWithGoogle } from '../services/firebase';
 
@@ -64,6 +75,88 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  // AI Voice states
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [currentPersona, setCurrentPersona] = useState<VoicePersona>(() => getVoicePersona());
+  const hasAutoSpokenRef = React.useRef(false);
+
+  // Subscribe to speech engine speaking status
+  useEffect(() => {
+    const unsub = aiVoice.onSpeakingChange(speaking => {
+      setIsSpeaking(speaking);
+    });
+    return unsub;
+  }, []);
+
+  // Automatic Welcome Voice for First-Time Scholars & Landing Visitors
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const playWelcomeNow = () => {
+      if (hasAutoSpokenRef.current) return;
+      hasAutoSpokenRef.current = true;
+      try {
+        if ('speechSynthesis' in window && window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      } catch {}
+      aiVoice.speakFirstVisitorGreeting();
+    };
+
+    // 1. Automatic trigger after 400ms tick for synthesizer discovery
+    const timer = setTimeout(() => {
+      playWelcomeNow();
+    }, 400);
+
+    // 2. Autoplay watchdog: In case browser enforces strict un-gestured autoplay restrictions,
+    // any natural interaction (touch, click, typing, input focus) will immediately launch/resume the voice!
+    const handleBrowserInteraction = () => {
+      if (!hasAutoSpokenRef.current) {
+        playWelcomeNow();
+      } else {
+        try {
+          if ('speechSynthesis' in window && window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        } catch {}
+      }
+      cleanupListeners();
+    };
+
+    const cleanupListeners = () => {
+      window.removeEventListener('pointerdown', handleBrowserInteraction);
+      window.removeEventListener('touchstart', handleBrowserInteraction);
+      window.removeEventListener('click', handleBrowserInteraction);
+      window.removeEventListener('focusin', handleBrowserInteraction);
+      window.removeEventListener('keydown', handleBrowserInteraction);
+    };
+
+    window.addEventListener('pointerdown', handleBrowserInteraction, { passive: true });
+    window.addEventListener('touchstart', handleBrowserInteraction, { passive: true });
+    window.addEventListener('click', handleBrowserInteraction, { passive: true });
+    window.addEventListener('focusin', handleBrowserInteraction, { passive: true });
+    window.addEventListener('keydown', handleBrowserInteraction, { passive: true });
+
+    return () => {
+      clearTimeout(timer);
+      cleanupListeners();
+    };
+  }, []);
+
+  const handleToggleVoice = () => {
+    if (isSpeaking) {
+      aiVoice.stop();
+    } else {
+      aiVoice.speakFirstVisitorGreeting();
+    }
+  };
+
+  const handlePersonaSwitch = (newPersona: VoicePersona) => {
+    setCurrentPersona(newPersona);
+    aiVoice.setPersona(newPersona);
+    aiVoice.speakFirstVisitorGreeting();
+  };
 
   // Load saved credentials on mount
   useEffect(() => {
@@ -410,6 +503,107 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
           </div>
         </div>
       </header>
+
+      {/* Automatic AI Welcome Voice Banner for First-Time Visitors & Logged-Out Scholars */}
+      <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border-b border-emerald-500/30 px-4 sm:px-8 py-2.5 text-xs">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shadow-inner transition-transform duration-300 ${
+              isSpeaking 
+                ? 'bg-emerald-500 text-slate-950 scale-105 ring-4 ring-emerald-400/30' 
+                : 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+            }`}>
+              {isSpeaking ? (
+                <div className="flex items-center gap-0.5 h-4">
+                  <span className="w-1 bg-slate-950 rounded-full animate-[pulse_0.6s_ease-in-out_infinite] h-2" />
+                  <span className="w-1 bg-slate-950 rounded-full animate-[pulse_0.4s_ease-in-out_infinite_0.1s] h-4" />
+                  <span className="w-1 bg-slate-950 rounded-full animate-[pulse_0.5s_ease-in-out_infinite_0.2s] h-3" />
+                  <span className="w-1 bg-slate-950 rounded-full animate-[pulse_0.7s_ease-in-out_infinite_0.15s] h-1.5" />
+                </div>
+              ) : (
+                <Volume2 className="w-4 h-4 text-emerald-400" />
+              )}
+            </div>
+
+            <div className="text-left">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-xs">
+                  {isSpeaking ? 'Sarah (AI Voice Coach) is speaking:' : 'AI Voice Coach: Sarah (Mid-20s American Lady)'}
+                </span>
+                {isSpeaking ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 font-bold bg-emerald-900/80 px-2 py-0.5 rounded-full border border-emerald-500/40 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Speaking greeting live
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/60">
+                    <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                    Automatic Audio Greeting Active
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300 leading-tight mt-0.5 max-w-xl">
+                {isSpeaking 
+                  ? "“Welcome to Study Naija! I'm Sarah, your AI coach. Please sign in or create your student account to start practicing past JAMB and WAEC questions. Let's get started!”"
+                  : "Welcome to Study Naija! Please sign in or create your student account to enter the CBT portal."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Persona switcher */}
+            <div className="inline-flex items-center rounded-lg bg-slate-950/70 p-0.5 border border-slate-700/80 text-[11px]">
+              <button
+                type="button"
+                onClick={() => handlePersonaSwitch('female')}
+                className={`px-2 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  currentPersona === 'female'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Switch to Sarah (Mid-20s American Lady Voice - en-US)"
+              >
+                🇺🇸 Sarah (US)
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePersonaSwitch('male')}
+                className={`px-2 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  currentPersona === 'male'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Switch to Chidi (Male Alternative Voice)"
+              >
+                👨🏾 Chidi
+              </button>
+            </div>
+
+            {/* Play/Stop button */}
+            <button
+              type="button"
+              onClick={handleToggleVoice}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                isSpeaking 
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/30'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40'
+              }`}
+            >
+              {isSpeaking ? (
+                <>
+                  <VolumeX className="w-3.5 h-3.5" />
+                  <span>Stop Voice</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Replay Voice</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Main Form Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex items-center justify-center">

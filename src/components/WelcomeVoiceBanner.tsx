@@ -58,6 +58,10 @@ export const WelcomeVoiceBanner: React.FC<WelcomeVoiceBannerProps> = ({ user, on
 
     const playWelcomeNow = () => {
       if (hasAutoSpokenRef.current) return;
+      if (aiVoice.isSpeaking()) {
+        hasAutoSpokenRef.current = true;
+        return;
+      }
       hasAutoSpokenRef.current = true;
 
       const activeName = getStudentFirstName(user?.name) || getStudentFirstName(user?.email) || getStoredFirstName() || 'Scholar';

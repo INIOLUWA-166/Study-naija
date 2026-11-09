@@ -28,14 +28,15 @@ import { StudentProfileModal } from './components/StudentProfileModal';
 import { BadgeUnlockedToast } from './components/BadgeUnlockedToast';
 import { AdminAiRevocationModal } from './components/AdminAiRevocationModal';
 import { AdminSuspensionModal } from './components/AdminSuspensionModal';
+import { JambNovelStudyView } from './components/JambNovelStudyView';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { ChampionsQualificationModal } from './components/ChampionsQualificationModal';
 import { ScientificCalculator } from './components/ScientificCalculator';
 import { StudentNotificationModal } from './components/StudentNotificationModal';
 import { NotificationToast } from './components/NotificationToast';
 import { ScholarHonorCodeModal } from './components/ScholarHonorCodeModal';
+import { WelcomeNewScholarModal } from './components/WelcomeNewScholarModal';
 import { studentNotificationManager } from './utils/studentNotificationManager';
-import { PastQuestionHarvesterView } from './components/PastQuestionHarvesterView';
 import { NewsFactCheckerAgentView } from './components/NewsFactCheckerAgentView';
 import { AIStudyAssistantChatbot } from './components/AIStudyAssistantChatbot';
 import { StudentLeaderboard } from './components/StudentLeaderboard';
@@ -65,7 +66,8 @@ import {
   Scale,
   ArrowLeft,
   Target,
-  Eye
+  Eye,
+  Ban
 } from 'lucide-react';
 import { tournamentManager, isUserQualifiedForChampions } from './utils/tournamentManager';
 import { tournamentAudio } from './utils/tournamentAudio';
@@ -129,6 +131,7 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => themeManager.getThemeMode(user));
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
+  const [showGuestWelcomePrompt, setShowGuestWelcomePrompt] = useState<boolean>(false);
   const [isDeviceSyncOpen, setIsDeviceSyncOpen] = useState<boolean>(false);
   const [isFlashChallengeOpen, setIsFlashChallengeOpen] = useState<boolean>(false);
   const [isVerificationOpen, setIsVerificationOpen] = useState<boolean>(false);
@@ -354,8 +357,10 @@ export default function App() {
       }
     }
 
+    let activeUserResult: User | null = null;
     try {
       const currentUser = await api.getCurrentUser();
+      activeUserResult = currentUser;
       setUser(currentUser);
       if (currentUser?.email) {
         const welcomeEmailKey = `studynaija_welcome_email_dispatched_${currentUser.email.toLowerCase()}`;
@@ -367,6 +372,7 @@ export default function App() {
     } catch {
       // If offline or temporary error, fall back to cached user
       const cached = authStorage.getUser();
+      activeUserResult = cached;
       setUser(cached);
       if (cached?.email) {
         const welcomeEmailKey = `studynaija_welcome_email_dispatched_${cached.email.toLowerCase()}`;
@@ -377,6 +383,9 @@ export default function App() {
       }
     } finally {
       setAuthLoading(false);
+      if (!activeUserResult) {
+        setShowGuestWelcomePrompt(true);
+      }
     }
 
     try {
@@ -392,6 +401,11 @@ export default function App() {
   }, []);
 
   const handleNavigate = (view: string, extra?: any) => {
+    // Intercept protected actions for unauthenticated guests
+    if (!user && (view === 'mock-exam' || view === 'arena-1v1' || view === 'dashboard' || view === 'profile')) {
+      handleOpenAuth(view === 'mock-exam' ? 'signup' : 'login');
+      return;
+    }
     if (view === 'device-sync') {
       setIsDeviceSyncOpen(true);
       return;
@@ -421,6 +435,18 @@ export default function App() {
     }
     if (view === 'rules' || view === 'honor-code' || view === 'conduct') {
       setIsHonorCodeOpen(true);
+      return;
+    }
+    if (view === 'question-grabber' || view === 'harvester' || view === 'grab-questions' || view === 'past-questions' || view === 'past-jamb' || view === 'jamb-archive' || view === 'study-planner') {
+      setDashboardInitialTab('study-planner');
+      setCurrentView('dashboard');
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (view === 'saved' || view === 'saved-questions') {
+      setDashboardInitialTab('saved-questions');
+      setCurrentView('dashboard');
+      window.scrollTo(0, 0);
       return;
     }
     if (view === 'dashboard' && extra?.tab) {
@@ -521,29 +547,17 @@ export default function App() {
     );
   }
 
-  // Fallback for unauthenticated visitors / guests so learning materials are the first thing everyone sees
-  const guestScholarUser: User = {
-    id: 'guest-scholar',
-    name: 'Scholar Guest',
-    email: '',
-    role: 'student',
-    educationLevel: 'secondary',
-    targetExam: 'JAMB',
-    targetCourse: 'General Studies',
-    premiumPlan: 'free',
-    createdAt: new Date().toISOString(),
-    xp: 50,
-    streakDays: 1,
-    lastActiveDate: new Date().toISOString(),
-    stats: {
-      questionsAnswered: 0,
-      averageScore: 0,
-      bestScore: 0,
-      weakestSubject: 'None'
-    }
-  };
+  // 2. Mandatory Login / Registration for First-Time Users & Unauthenticated Scholars
+  // When a visitor arrives and is not authenticated, they MUST sign in or register before accessing the CBT Portal.
+  if (!user) {
+    return (
+      <AuthGateway
+        onAuthSuccess={handleAuthSuccess}
+      />
+    );
+  }
 
-  const effectiveUser = user || guestScholarUser;
+  const effectiveUser = user;
 
   // Check tournament state to honor 1st, 2nd, and 3rd place champions
   const activeTournamentState = tournamentManager.getState(user);
@@ -651,6 +665,58 @@ export default function App() {
         </div>
       )}
 
+      {/* NON-BYPASSABLE ACCOUNT SANCTION ENFORCEMENT (BAN / SUSPENSION) */}
+      {user && (user.isBanned || (user.isSuspended && (!user.suspensionExpiresAt || new Date(user.suspensionExpiresAt).getTime() > Date.now()))) && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center space-y-5 shadow-2xl border border-red-300 animate-in fade-in zoom-in-95">
+            <div className={`w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-white shadow-xl ${
+              user.isBanned ? 'bg-red-600 shadow-red-900/30' : 'bg-amber-500 shadow-amber-900/30'
+            }`}>
+              <Ban className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-['Outfit']">
+                {user.isBanned ? 'Account Permanently Banned' : 'Account Temporarily Suspended'}
+              </h2>
+              <p className="text-xs text-slate-500">
+                Administrative Disciplinary Sanction Active
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-700 text-left space-y-2.5">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Sanction Reason:</span>
+                <p className="font-bold text-slate-900 mt-0.5">
+                  {user.banReason || user.suspensionReason || 'Violation of academic integrity or platform conduct policies.'}
+                </p>
+              </div>
+
+              {user.isSuspended && user.suspensionExpiresAt && (
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block tracking-wider">Suspension Ends:</span>
+                  <p className="font-bold text-amber-800 mt-0.5">
+                    {new Date(user.suspensionExpiresAt).toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500">
+                If you believe this action was taken in error or want to file an official appeal, please email StudyNaija Administration at <strong className="text-slate-800">luvkidjaja@gmail.com</strong>.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-sm"
+            >
+              Sign Out from Account
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Exclusive Champions League Winner Website Header Banner (Only on Home view) */}
       {currentView === 'home' && effectiveThemeVariant === 'gold' && (
         <div className="bg-gradient-to-r from-amber-950 via-yellow-950 to-amber-950 text-amber-200 py-2 px-4 text-center border-b border-amber-500/40 text-xs font-semibold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
@@ -710,7 +776,7 @@ export default function App() {
       <Navbar
         currentView={currentView}
         activeView={currentView}
-        user={decoratedUser}
+        user={user ? decoratedUser : null}
         onNavigate={handleNavigate}
         setActiveView={handleNavigate}
         onOpenAuth={handleOpenAuth}
@@ -718,7 +784,13 @@ export default function App() {
         activeExamFilter={activeExamFilter}
         setActiveExamFilter={setActiveExamFilter}
         onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
-        onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenProfile={() => {
+          if (!user) {
+            handleOpenAuth('login');
+          } else {
+            setIsProfileOpen(true);
+          }
+        }}
         onOpenGoogleWorkspace={() => setIsGoogleWorkspaceOpen(true)}
         onOpenCalculator={() => setIsGlobalCalculatorOpen(true)}
         unreadNotificationsCount={unreadNotifCount}
@@ -727,6 +799,37 @@ export default function App() {
         themeMode={themeMode}
         onToggleTheme={handleToggleTheme}
       />
+
+      {/* Persistent Guest Banner when not signed in */}
+      {!user && (
+        <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white px-4 py-2.5 text-xs font-medium shadow-md border-b border-emerald-500/30">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 text-center sm:text-left">
+              <span className="text-base shrink-0">👋</span>
+              <span>
+                <strong className="font-bold text-amber-300">Welcome, New Scholar!</strong> You are currently in Guest Mode.
+                <span className="text-emerald-100 ml-1">
+                  Please log in or register your student account to take full CBT exams, save test scores, track your UTME countdown, and earn monthly prizes.
+                </span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => handleOpenAuth('signup')}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-all hover:scale-105 cursor-pointer"
+              >
+                Register Free (New User)
+              </button>
+              <button
+                onClick={() => handleOpenAuth('login')}
+                className="px-3.5 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl border border-emerald-400/40 transition-colors cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Application Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
@@ -807,15 +910,36 @@ export default function App() {
           )}
 
           {(currentView === 'question-grabber' || currentView === 'harvester' || currentView === 'grab-questions' || currentView === 'past-questions' || currentView === 'past-jamb' || currentView === 'jamb-archive') && (
-            <motion.div key="question-grabber" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
-              <PastQuestionHarvesterView
+            <motion.div key="question-grabber-redirect" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-8 text-center">
+              <div className="max-w-md mx-auto bg-white rounded-3xl p-8 border border-slate-200 shadow-sm space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-xl font-black">
+                  📅
+                </div>
+                <h3 className="text-lg font-black text-slate-900 font-['Outfit']">Redirecting to Daily Study Planner</h3>
+                <p className="text-xs text-slate-500">Plan your daily topics and track your syllabus progress with zero duplicate questions.</p>
+                <button
+                  onClick={() => {
+                    setDashboardInitialTab('study-planner');
+                    setCurrentView('dashboard');
+                  }}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                >
+                  Open Daily Study Planner
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {(currentView === 'novel-study' || currentView === 'jamb-novel' || currentView === 'the-life-changer') && (
+            <motion.div key="novel-study" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+              <JambNovelStudyView
                 user={user}
-                onNavigate={handleNavigate}
-                onStartPractice={(grabbedQuestions) => {
-                  setCustomPracticeQuestions(grabbedQuestions);
+                onStartPractice={(novelQuestions) => {
+                  setCustomPracticeQuestions(novelQuestions);
                   setCurrentView('practice');
                   window.scrollTo(0, 0);
                 }}
+                onNavigate={handleNavigate}
               />
             </motion.div>
           )}
@@ -1232,13 +1356,19 @@ export default function App() {
         onNavigate={handleNavigate}
       />
 
-      {/* Real-time Notification Toast Notification */}
-      <NotificationToast
-        onOpenNotifications={() => setIsNotificationModalOpen(true)}
-        onNavigate={handleNavigate}
+      {/* Welcome & Login Prompt Modal for New Users / Guests */}
+      <WelcomeNewScholarModal
+        isOpen={showGuestWelcomePrompt && !user}
+        onClose={() => setShowGuestWelcomePrompt(false)}
+        onLogin={() => {
+          setShowGuestWelcomePrompt(false);
+          handleOpenAuth('login');
+        }}
+        onRegister={() => {
+          setShowGuestWelcomePrompt(false);
+          handleOpenAuth('signup');
+        }}
       />
-
-
 
     </div>
   );

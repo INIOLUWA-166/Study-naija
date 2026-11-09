@@ -333,7 +333,7 @@ export const AdminSentinelView: React.FC<AdminSentinelViewProps> = ({
             <option value="payload_injection">💉 SQL Injection Attack (&apos; UNION SELECT passwordHash FROM users --)</option>
             <option value="exam_malpractice_solicitation">🚫 Exam Malpractice Solicitation (Requesting Friday Morning JAMB Expo / Runs)</option>
             <option value="score_tampering">🚨 Score Tampering Payload (Tampered JSON: 400/400 with negative time)</option>
-            <option value="payment_fraud">💳 Forged Bank Transfer Receipt & Repeated Fake Session ID</option>
+            <option value="payment_fraud">💳 Forged Bank Transfer Receipt & Fabricated Payment Claims</option>
           </select>
 
           <button

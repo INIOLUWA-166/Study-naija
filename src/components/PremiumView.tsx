@@ -58,12 +58,11 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
   const [pendingApproval, setPendingApproval] = useState<boolean>(false);
   const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
 
-  // Real Nigerian & Abroad payment methods
-  const [selectedMethod, setSelectedMethod] = useState<'opay' | 'palmpay' | 'bank_transfer' | 'cards_ng' | 'international_card'>('opay');
+  // Verified Nigerian Bank Transfer Channels
+  const [selectedMethod, setSelectedMethod] = useState<'opay' | 'palmpay' | 'bank_transfer'>('opay');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [senderAccountName, setSenderAccountName] = useState<string>('');
   const [senderBank, setSenderBank] = useState<string>('');
-  const [bankSessionId, setBankSessionId] = useState<string>('');
   const [receiptScreenshotUrl, setReceiptScreenshotUrl] = useState<string | null>(null);
   const [receiptFileName, setReceiptFileName] = useState<string>('');
   const [uploadingReceipt, setUploadingReceipt] = useState<boolean>(false);
@@ -84,44 +83,7 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
     }
   ]);
   const [tutorLoading, setTutorLoading] = useState<boolean>(false);
-  const [checkoutGatewayTab, setCheckoutGatewayTab] = useState<'manual' | 'automated'>('manual');
-  const [paystackProcessing, setPaystackProcessing] = useState<boolean>(false);
-  const [paystackCardNumber, setPaystackCardNumber] = useState<string>('5399 4100 0000 1234');
-  const [paystackExpiry, setPaystackExpiry] = useState<string>('12/28');
-  const [paystackCvv, setPaystackCvv] = useState<string>('890');
-
   const activePlan = PRICING_PLANS.find(p => p.id === selectedPlanId) || PRICING_PLANS[1];
-
-  const handlePayWithPaystack = async () => {
-    if (!user) {
-      onOpenAuth();
-      return;
-    }
-    setPaystackProcessing(true);
-    setError(null);
-    try {
-      const initRes = await api.initializePaystackPayment(selectedPlanId, user.email);
-      if (initRes.authorizationUrl) {
-        window.open(initRes.authorizationUrl, '_blank', 'noopener,noreferrer');
-        return;
-      }
-
-      // Automated instant verification
-      const verifyRes = await api.verifyPaystackPayment(initRes.reference, selectedPlanId);
-      if (verifyRes.status === 'approved' && verifyRes.user) {
-        setVerifiedSuccess(true);
-        setPendingApproval(false);
-        setAiVerificationNote(verifyRes.message || 'Payment confirmed instantly via Paystack! VIP plan activated.');
-        onPaymentSuccess(verifyRes.user);
-      } else {
-        throw new Error(verifyRes.message || 'Payment verification failed');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Paystack payment could not be processed. Please use Direct Bank Transfer instead.');
-    } finally {
-      setPaystackProcessing(false);
-    }
-  };
 
   const handleInitiateUpgrade = async (planId: 'basic' | 'medium' | 'premium', method = selectedMethod) => {
     if (!user) {
@@ -149,7 +111,7 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
     }
   };
 
-  const handleSwitchPaymentMethod = async (method: 'opay' | 'palmpay' | 'bank_transfer' | 'cards_ng' | 'international_card') => {
+  const handleSwitchPaymentMethod = async (method: 'opay' | 'palmpay' | 'bank_transfer') => {
     setSelectedMethod(method);
     setError(null);
     setLoading(true);
@@ -201,13 +163,7 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
       return;
     }
 
-    // Protection #2: Mandatory Bank Transaction Reference / Session ID
-    if (!bankSessionId.trim() || bankSessionId.trim().length < 6) {
-      setError('Mandatory Field: Please enter the 6-to-30 digit Bank Transaction Reference or NIP Session ID from your debit alert or bank app.');
-      return;
-    }
-
-    // Protection #1: Mandatory Proof of Payment / Receipt Screenshot
+    // Mandatory Proof of Payment / Receipt Screenshot
     if (!receiptScreenshotUrl) {
       setError('Mandatory Proof of Payment: You must upload a screenshot or photo of your transfer receipt before submitting for manual admin verification.');
       return;
@@ -222,7 +178,6 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
         reference: txData.reference,
         senderAccountName: senderAccountName.trim(),
         senderBank: senderBank.trim(),
-        bankSessionId: bankSessionId.trim(),
         receiptScreenshotUrl: receiptScreenshotUrl,
         planId: selectedPlanId
       });
@@ -1019,7 +974,7 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500">Beneficiary:</span>
-                    <span className="font-bold text-slate-800">INIOLUWA JESULEJE MICHAEL</span>
+                    <span className="font-bold text-slate-800">INIOLUWA JESULEKE MICHEAL</span>
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500">Reference:</span>
@@ -1118,212 +1073,68 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
                   </div>
                 </div>
 
-                {/* Gateway Switcher Tabs: Manual Transfer vs Automated Instant Paystack */}
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setCheckoutGatewayTab('manual')}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      checkoutGatewayTab === 'manual'
-                        ? 'bg-white dark:bg-slate-900 text-emerald-900 dark:text-emerald-300 shadow-xs border border-emerald-200 dark:border-emerald-800'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    <Building className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Bank Transfer (OPay)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCheckoutGatewayTab('automated')}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      checkoutGatewayTab === 'automated'
-                        ? 'bg-white dark:bg-slate-900 text-blue-900 dark:text-blue-300 shadow-xs border border-blue-200 dark:border-blue-800'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Paystack (Instant 24/7)</span>
-                  </button>
-                </div>
-
-                {checkoutGatewayTab === 'automated' ? (
-                  /* Automated Paystack Gateway Option */
-                  <div className="space-y-3 animate-in fade-in duration-150">
-                    <div className="p-3.5 rounded-xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs flex items-center gap-1.5 text-blue-900 dark:text-blue-300">
-                          <Zap className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
-                          <span>Instant 24/7 Automated Activation</span>
-                        </span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-200/70 dark:bg-blue-900 text-blue-900 dark:text-blue-200 font-bold">
-                          Zero Wait Time
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                        Pay with your Nigerian <strong>Debit Card (Mastercard, Visa, Verve)</strong>, Bank USSD, or Instant NIBSS transfer. Your VIP subscription is activated automatically the second payment clears.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                        Card Checkout Simulation
-                      </span>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-0.5">Card Number</label>
-                        <input
-                          type="text"
-                          value={paystackCardNumber}
-                          onChange={e => setPaystackCardNumber(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-0.5">Expiry</label>
-                          <input
-                            type="text"
-                            value={paystackExpiry}
-                            onChange={e => setPaystackExpiry(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                {/* Direct Bank Transfer Checkout Flow */}
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  {/* Compact Payment Method Selector */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Select Transfer Channel:
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleSwitchPaymentMethod('opay')}
+                        className={`p-2 rounded-lg border text-left transition-all cursor-pointer relative ${
+                          selectedMethod === 'opay'
+                            ? 'border-emerald-500 bg-emerald-50/90 dark:bg-emerald-950/40 ring-1 ring-emerald-500/30'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-emerald-600" />
+                            OPay
+                          </span>
+                          <span className="text-[8px] bg-emerald-600 text-white font-bold px-1 py-0.2 rounded-full">
+                            Fastest
+                          </span>
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-0.5">CVV</label>
-                          <input
-                            type="password"
-                            maxLength={4}
-                            value={paystackCvv}
-                            onChange={e => setPaystackCvv(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-bold mt-0.5">9166059676</p>
+                      </button>
 
-                    {error && (
-                      <div className="p-2.5 bg-red-50 border border-red-300 text-red-700 text-xs rounded-xl flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                        <div className="leading-tight font-semibold text-[11px]">{error}</div>
-                      </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => handleSwitchPaymentMethod('palmpay')}
+                        className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                          selectedMethod === 'palmpay'
+                            ? 'border-purple-500 bg-purple-50/80 dark:bg-purple-950/40 ring-1 ring-purple-500/20'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
+                        }`}
+                      >
+                        <span className="font-bold text-xs text-purple-900 dark:text-purple-300 flex items-center gap-1">
+                          <Smartphone className="w-3 h-3 text-purple-600" />
+                          PalmPay
+                        </span>
+                        <p className="text-[9px] text-slate-500 mt-0.5">PalmPay App</p>
+                      </button>
 
-                    <div className="pt-1 space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setModalOpen(false)}
-                          className="w-1/3 py-2.5 px-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer border border-slate-200 dark:border-slate-700"
-                        >
-                          <X className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Exit</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handlePayWithPaystack}
-                          disabled={paystackProcessing}
-                          className="w-2/3 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
-                        >
-                          {paystackProcessing ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              <span>Processing Instant Payment...</span>
-                            </div>
-                          ) : (
-                            <>
-                              <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                              <span>Pay {activePlan.price} with Paystack</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      <p className="text-[9px] text-center text-slate-400 flex items-center justify-center gap-1">
-                        <Lock className="w-2.5 h-2.5 text-slate-400" />
-                        <span>Secured 256-bit SSL • Instant Automated Settlement</span>
-                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleSwitchPaymentMethod('bank_transfer')}
+                        className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                          selectedMethod === 'bank_transfer'
+                            ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 ring-1 ring-blue-500/20'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
+                        }`}
+                      >
+                        <span className="font-bold text-xs text-blue-900 dark:text-blue-300 flex items-center gap-1">
+                          <Building className="w-3 h-3 text-blue-600" />
+                          Any Bank
+                        </span>
+                        <p className="text-[9px] text-slate-500 mt-0.5">GTB, Zenith, Kuda</p>
+                      </button>
                     </div>
                   </div>
-                ) : (
-                  /* Manual OPay Transfer Flow */
-                  <div className="space-y-3 animate-in fade-in duration-150">
-                    {/* Compact Payment Method Selector */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Select Channel:
-                      </label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchPaymentMethod('opay')}
-                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer relative ${
-                            selectedMethod === 'opay'
-                              ? 'border-emerald-500 bg-emerald-50/90 dark:bg-emerald-950/40 ring-1 ring-emerald-500/30'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
-                              <Smartphone className="w-3 h-3 text-emerald-600" />
-                              OPay
-                            </span>
-                            <span className="text-[8px] bg-emerald-600 text-white font-bold px-1 py-0.2 rounded-full">
-                              Fastest
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-bold mt-0.5">9166059676</p>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchPaymentMethod('bank_transfer')}
-                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                            selectedMethod === 'bank_transfer'
-                              ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 ring-1 ring-blue-500/20'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
-                          }`}
-                        >
-                          <span className="font-bold text-xs text-blue-900 dark:text-blue-300 flex items-center gap-1">
-                            <Building className="w-3 h-3 text-blue-600" />
-                            Any Bank Transfer
-                          </span>
-                          <p className="text-[9px] text-slate-500 mt-0.5">Kuda, Zenith, GTB, etc.</p>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchPaymentMethod('palmpay')}
-                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                            selectedMethod === 'palmpay'
-                              ? 'border-purple-500 bg-purple-50/80 dark:bg-purple-950/40 ring-1 ring-purple-500/20'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
-                          }`}
-                        >
-                          <span className="font-bold text-xs text-purple-900 dark:text-purple-300 flex items-center gap-1">
-                            <Smartphone className="w-3 h-3 text-purple-600" />
-                            PalmPay
-                          </span>
-                          <p className="text-[9px] text-slate-500 mt-0.5">PalmPay App transfer</p>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchPaymentMethod('cards_ng')}
-                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                            selectedMethod === 'cards_ng'
-                              ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 ring-1 ring-emerald-500/20'
-                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800'
-                          }`}
-                        >
-                          <span className="font-bold text-xs text-slate-900 dark:text-slate-200 flex items-center gap-1">
-                            <CreditCard className="w-3 h-3 text-emerald-600" />
-                            Cards & Abroad
-                          </span>
-                          <p className="text-[9px] text-slate-500 mt-0.5">Verve, Visa, Master, USD</p>
-                        </button>
-                      </div>
-                    </div>
 
                     {/* Channel Details & Action Box */}
                     {txData && (
@@ -1428,24 +1239,6 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
                         <div className="text-[11px] leading-tight text-slate-600 dark:text-slate-300">
                           <strong className="text-slate-900 dark:text-white">Admin Queue Verification:</strong> Enter your transfer details and upload your receipt screenshot so Inioluwa can match your credit immediately.
                         </div>
-                      </div>
-
-                      {/* Mandatory Bank Transaction ID / Session ID */}
-                      <div>
-                        <div className="flex items-center justify-between mb-0.5">
-                          <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                            Bank Transaction ID / NIP Session ID <span className="text-red-500 font-black">*</span>
-                          </label>
-                          <span className="text-[9px] text-slate-400 font-medium">From debit SMS or bank app</span>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="e.g. 1000042609191024560001 or 0902678129"
-                          value={bankSessionId}
-                          onChange={e => setBankSessionId(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                          required
-                        />
                       </div>
 
                       {/* Mandatory Proof of Payment / Receipt Screenshot Upload */}
@@ -1581,9 +1374,8 @@ export const PremiumView: React.FC<PremiumViewProps> = ({
                       </p>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
           </div>
         </div>

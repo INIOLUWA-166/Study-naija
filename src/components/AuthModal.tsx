@@ -25,6 +25,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (initialMode) {
+      setMode(initialMode === 'login' ? 'login' : 'register');
+    }
+  }, [initialMode, isOpen]);
+
   if (!isOpen) return null;
 
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
