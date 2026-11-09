@@ -188,8 +188,11 @@ export async function signInWithGoogle(): Promise<{ firebaseUser: FirebaseUser; 
     }
 
     return { firebaseUser: fbUser, user: appUser };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Google Sign-In failed:', error);
+    if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+      throw new Error(`Google Sign-In is not authorized for domain (${window.location.hostname}). Please sign in or register below using your Email and Password.`);
+    }
     throw error;
   }
 }
