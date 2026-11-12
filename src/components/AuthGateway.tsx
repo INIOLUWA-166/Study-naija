@@ -75,6 +75,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [domainNotice, setDomainNotice] = useState<{ domain: string; message: string } | null>(null);
 
   // AI Voice states
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -177,6 +178,8 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
     let clean = num.trim().replace(/\D/g, '');
     if (clean.startsWith('234') && clean.length === 13) {
       clean = '0' + clean.slice(3);
+    } else if (clean.length === 10 && /^[789]/.test(clean)) {
+      clean = '0' + clean;
     }
     return clean;
   };
@@ -192,14 +195,15 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
   };
 
   const getEmailOrPhoneError = (): string | null => {
-    if (!email.trim()) return 'Email address or Nigerian phone number is required.';
-    const isEmail = email.includes('@');
+    const trimmed = email.trim();
+    if (!trimmed) return 'Email address or Nigerian phone number is required.';
+    const isEmail = trimmed.includes('@');
     if (isEmail) {
-      if (!emailRegex.test(email.trim().toLowerCase())) {
+      if (!emailRegex.test(trimmed.toLowerCase())) {
         return 'Please enter a valid email address (e.g., student@example.com).';
       }
     } else {
-      const p = cleanNigerianPhone(email);
+      const p = cleanNigerianPhone(trimmed);
       if (p.length !== 11) {
         return 'Please enter a valid 11-digit Nigerian phone number (e.g., 08012345678) or email.';
       }
@@ -226,7 +230,8 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
 
   const getPasswordError = (): string | null => {
     if (!password) return 'Password is required.';
-    if (password.length < 6) return 'Password must be at least 6 characters long.';
+    // Only enforce minimum 6 characters during new registration, not during login
+    if (mode === 'register' && password.length < 6) return 'Password must be at least 6 characters long.';
     return null;
   };
 
@@ -281,13 +286,30 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setServerError(null);
+    setDomainNotice(null);
     try {
       const { firebaseUser, user: appUser } = await signInWithGoogle();
-      const token = await firebaseUser.getIdToken();
-      authStorage.setToken(token);
-      authStorage.setUser(appUser);
+      
+      // Persist session into backend database and acquire full-stack 365-day JWT
+      let finalUser: User = appUser;
+      try {
+        const syncRes = await api.syncGoogleUser({
+          id: appUser.id,
+          email: appUser.email,
+          name: appUser.name,
+          educationLevel: appUser.educationLevel,
+          targetExam: appUser.targetExam,
+          targetCourse: appUser.targetCourse
+        });
+        finalUser = syncRes.user;
+      } catch (syncErr) {
+        console.warn('[Google Auth] Local backend sync notice:', syncErr);
+        const token = await firebaseUser.getIdToken();
+        authStorage.setToken(token);
+        authStorage.setUser(appUser);
+      }
 
-      const firstName = getStudentFirstName(appUser.name);
+      const firstName = getStudentFirstName(finalUser.name);
       if (firstName) {
         setStoredFirstName(firstName);
         markWelcomeAsSpoken();
@@ -295,10 +317,16 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
           aiVoice.speakWelcomeGreeting(firstName);
         }, 350);
       }
-      studentNotificationManager.triggerSignupWelcome(appUser);
-      onAuthSuccess(appUser);
+      studentNotificationManager.triggerSignupWelcome(finalUser);
+      onAuthSuccess(finalUser);
     } catch (err: any) {
-      if (err?.code !== 'auth/popup-closed-by-user') {
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your domain';
+        setDomainNotice({
+          domain: currentHost,
+          message: `Firebase Google authentication requires "${currentHost}" to be added to Authorized Domains in your Firebase Console. You can immediately log in or register below using your Phone Number or Email without any domain restrictions!`
+        });
+      } else if (err?.code !== 'auth/popup-closed-by-user') {
         setServerError(err?.message || 'Google Sign-In failed. Please try again.');
       }
     } finally {
@@ -718,7 +746,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
                 <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl mt-4 border border-slate-200 text-xs">
                   <button
                     type="button"
-                    onClick={() => { setMode('register'); setServerError(null); setSubmitted(false); }}
+                    onClick={() => { setMode('register'); setServerError(null); setDomainNotice(null); setSubmitted(false); setTouched({}); }}
                     className={`py-2 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
                       mode === 'register' 
                         ? 'bg-emerald-600 text-white shadow-xs' 
@@ -729,7 +757,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setMode('login'); setServerError(null); setSubmitted(false); }}
+                    onClick={() => { setMode('login'); setServerError(null); setDomainNotice(null); setSubmitted(false); setTouched({}); }}
                     className={`py-2 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
                       mode === 'login' 
                         ? 'bg-emerald-600 text-white shadow-xs' 
@@ -740,7 +768,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setMode('device-sync'); setServerError(null); setSubmitted(false); }}
+                    onClick={() => { setMode('device-sync'); setServerError(null); setDomainNotice(null); setSubmitted(false); setTouched({}); }}
                     className={`py-2 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                       mode === 'device-sync' 
                         ? 'bg-emerald-600 text-white shadow-xs' 
@@ -776,12 +804,57 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({ onAuthSuccess }) => {
                 </div>
               </div>
 
-              {/* STRICT ERROR ALERT BANNER: Shakes and alerts if info is wrong */}
-              {serverError && (
+              {/* DOMAIN AUTHORIZATION HELP BANNER (When Google Sign-In is triggered on an un-whitelisted custom domain) */}
+              {domainNotice && (
+                <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 text-amber-950 text-xs rounded-2xl space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-start gap-2.5">
+                    <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-extrabold text-amber-900 text-sm">
+                        Google Sign-In Domain Authorization Notice
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed mt-1">
+                        {domainNotice.message}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-2 border-t border-amber-200/80 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('login');
+                        setDomainNotice(null);
+                        setServerError(null);
+                        setTouched({});
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs"
+                    >
+                      👉 Switch to Phone / Email Log In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuickDemoStudent}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs"
+                    >
+                      ⚡ Instant 1-Click Access
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CONTEXT-AWARE ERROR ALERT BANNER */}
+              {serverError && !domainNotice && (
                 <div className="mb-4 p-3.5 bg-red-50 border-2 border-red-300 text-red-800 text-xs rounded-xl flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2 duration-150">
                   <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
-                    <div className="font-bold text-red-900">Information Rejected</div>
+                    <div className="font-bold text-red-900">
+                      {serverError.includes('password') || serverError.includes('credentials') || serverError.includes('No account found')
+                        ? 'Incorrect Credentials'
+                        : serverError.includes('Access Denied') || serverError.includes('ACCESS DENIED')
+                          ? 'Access Denied'
+                          : 'Verification Notice'}
+                    </div>
                     <div className="leading-relaxed text-[11px]">{serverError}</div>
                   </div>
                 </div>

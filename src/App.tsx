@@ -206,6 +206,16 @@ export default function App() {
             };
             setUser(syncedUser);
             authStorage.setUser(syncedUser);
+            if (!authStorage.getToken()) {
+              api.syncGoogleUser({
+                id: syncedUser.id,
+                email: syncedUser.email,
+                name: syncedUser.name,
+                educationLevel: syncedUser.educationLevel,
+                targetExam: syncedUser.targetExam,
+                targetCourse: syncedUser.targetCourse
+              }).catch(() => {});
+            }
           }
         } catch (err) {
           console.warn('Could not restore user from Firestore:', err);

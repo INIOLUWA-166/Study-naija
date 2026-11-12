@@ -1814,19 +1814,35 @@ app.post('/api/auth/login', (req, res) => {
     let cleanPhone = loginTarget.replace(/\D/g, '');
     if (cleanPhone.startsWith('234') && cleanPhone.length === 13) {
       cleanPhone = '0' + cleanPhone.slice(3);
+    } else if (cleanPhone.length === 10 && /^[789]/.test(cleanPhone)) {
+      cleanPhone = '0' + cleanPhone;
     }
 
     let user: (User & { passwordHash: string }) | undefined;
 
-    if (isEmail) {
-      const emailNormalized = loginTarget.toLowerCase();
-      user = users.find(u => u.email.toLowerCase() === emailNormalized);
-    } else {
-      user = users.find(u => (u.phone && u.phone === cleanPhone) || u.email.toLowerCase() === loginTarget.toLowerCase());
-    }
+    const targetLower = loginTarget.toLowerCase();
+    user = users.find(u => {
+      if (u.email && u.email.toLowerCase() === targetLower) return true;
+      if (cleanPhone && cleanPhone.length >= 10) {
+        if (u.phone && (u.phone === cleanPhone || u.phone.replace(/\D/g, '') === cleanPhone)) return true;
+        if (u.phone) {
+          let uClean = u.phone.replace(/\D/g, '');
+          if (uClean.startsWith('234') && uClean.length === 13) uClean = '0' + uClean.slice(3);
+          if (uClean === cleanPhone) return true;
+        }
+      }
+      return false;
+    });
 
     if (!user) {
       return res.status(401).json({ error: 'Access Denied: No account found with this email or phone number. Please check your spelling or register a new student profile.' });
+    }
+
+    // If user account was created via Google Sign-In or without a password
+    if (!user.passwordHash) {
+      return res.status(401).json({
+        error: 'This account was created with Google Sign-In. Please click "Continue with Google" or click "Forgot on new phone?" to set a custom password.'
+      });
     }
 
     // Verify password hash
@@ -1880,12 +1896,105 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     // 365 days JWT token persistence
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '365d' });
+    const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '365d' });
     const { passwordHash: _, ...safeUser } = user;
 
     return res.json({ token, user: safeUser });
   } catch (error) {
     return res.status(500).json({ error: 'Internal login verification error. Please try again.' });
+  }
+});
+
+// 3.05 Google Auth User Session Synchronization & Token Issuance
+app.post('/api/auth/google-sync', async (req, res) => {
+  try {
+    const { id, email, name, educationLevel, targetExam, targetCourse, photoURL } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required for Google account synchronization.' });
+    }
+
+    const emailNormalized = email.trim().toLowerCase();
+    const isDefaultAdmin = emailNormalized === 'luvkidjaja@gmail.com';
+
+    let user = users.find(u => u.email.toLowerCase() === emailNormalized);
+
+    if (user) {
+      // Sync Google attributes
+      if (name && (!user.name || user.name === 'Scholar')) {
+        user.name = name.trim();
+      }
+      if (isDefaultAdmin) {
+        user.role = 'admin';
+        user.premiumPlan = 'premium';
+      }
+      user.lastActiveDate = new Date().toISOString();
+      saveUsers();
+    } else {
+      // Create registered user in persistent database
+      const newUserId = id || `google_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      user = {
+        id: newUserId,
+        name: name ? name.trim() : 'Nigerian Scholar',
+        email: emailNormalized,
+        role: isDefaultAdmin ? 'admin' : 'student',
+        educationLevel: educationLevel || 'secondary',
+        targetExam: targetExam || 'JAMB',
+        targetCourse: targetCourse || 'General Studies',
+        premiumPlan: isDefaultAdmin ? 'premium' : 'free',
+        createdAt: new Date().toISOString(),
+        xp: 100,
+        streakDays: 1,
+        lastActiveDate: new Date().toISOString(),
+        stats: {
+          questionsAnswered: 0,
+          averageScore: 0,
+          bestScore: 0,
+          weakestSubject: 'None'
+        },
+        passwordHash: ''
+      };
+      users.push(user);
+      saveUsers();
+
+      sendWelcomeEmailToStudent(user).catch(err => {
+        console.warn('[Welcome Email] Google signup email dispatch error:', err);
+      });
+    }
+
+    // Enforce Admin Ban
+    if (user.isBanned) {
+      return res.status(403).json({
+        error: `ACCESS DENIED: Your student account has been permanently banned by the Admin. Reason: ${user.banReason || 'Academic integrity or code of conduct violation'}. Contact luvkidjaja@gmail.com for inquiries.`,
+        isBanned: true,
+        banReason: user.banReason
+      });
+    }
+
+    // Enforce Admin Suspension
+    if (user.isSuspended) {
+      if (user.suspensionExpiresAt && new Date(user.suspensionExpiresAt).getTime() > Date.now()) {
+        const expiresFormatted = new Date(user.suspensionExpiresAt).toLocaleString();
+        return res.status(403).json({
+          error: `ACCESS DENIED: Your student account is currently suspended until ${expiresFormatted}. Reason: ${user.suspensionReason || 'Account suspended by Admin'}.`,
+          isSuspended: true,
+          suspensionReason: user.suspensionReason,
+          suspensionExpiresAt: user.suspensionExpiresAt
+        });
+      } else {
+        user.isSuspended = false;
+        user.suspensionExpiresAt = null;
+        user.suspensionReason = undefined;
+        saveUsers();
+      }
+    }
+
+    const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '365d' });
+    const { passwordHash: _, ...safeUser } = user;
+
+    return res.json({ token, user: safeUser });
+  } catch (error) {
+    console.error('Google sync error:', error);
+    return res.status(500).json({ error: 'Failed to synchronize Google account session.' });
   }
 });
 

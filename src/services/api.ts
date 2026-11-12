@@ -98,6 +98,102 @@ const getHeaders = (hasBody = true) => {
   return headers;
 };
 
+const LOCAL_USERS_DIRECTORY_KEY = 'studynaija_local_users_directory_v1';
+
+interface LocalStoredUser extends User {
+  password?: string;
+}
+
+const getDefaultLocalUsers = (): LocalStoredUser[] => [
+  {
+    id: 'user-student-demo',
+    name: 'Chukwuebuka Obi',
+    email: 'student@studynaija.ng',
+    phone: '08012345678',
+    password: 'StudentPass123!',
+    role: 'student',
+    educationLevel: 'secondary',
+    targetExam: 'JAMB',
+    targetCourse: 'Medicine & Surgery, UNILAG',
+    premiumPlan: 'free',
+    createdAt: new Date().toISOString(),
+    xp: 250,
+    streakDays: 5,
+    stats: {
+      questionsAnswered: 91,
+      averageScore: 74,
+      bestScore: 88,
+      weakestSubject: 'Physics'
+    }
+  },
+  {
+    id: 'user-admin-demo',
+    name: 'StudyNaija Admin',
+    email: 'admin@studynaija.ng',
+    phone: '08099999999',
+    password: 'AdminPass123!',
+    role: 'admin',
+    educationLevel: 'university',
+    targetExam: 'BOTH',
+    targetCourse: 'Administration',
+    premiumPlan: 'premium',
+    createdAt: new Date().toISOString(),
+    xp: 1200,
+    streakDays: 30,
+    stats: {
+      questionsAnswered: 400,
+      averageScore: 95,
+      bestScore: 100,
+      weakestSubject: 'None'
+    }
+  }
+];
+
+const loadLocalUsersDirectory = (): LocalStoredUser[] => {
+  try {
+    const raw = localStorage.getItem(LOCAL_USERS_DIRECTORY_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  const defaults = getDefaultLocalUsers();
+  try {
+    localStorage.setItem(LOCAL_USERS_DIRECTORY_KEY, JSON.stringify(defaults));
+  } catch {}
+  return defaults;
+};
+
+const saveLocalUsersDirectory = (list: LocalStoredUser[]) => {
+  try {
+    localStorage.setItem(LOCAL_USERS_DIRECTORY_KEY, JSON.stringify(list));
+  } catch {}
+};
+
+const normalizePhoneForAuth = (raw: string): string => {
+  let clean = raw.trim().replace(/\D/g, '');
+  if (clean.startsWith('234') && clean.length === 13) {
+    clean = '0' + clean.slice(3);
+  } else if (clean.length === 10 && /^[789]/.test(clean)) {
+    clean = '0' + clean;
+  }
+  return clean;
+};
+
+async function fetchBackendJson(url: string, init?: RequestInit): Promise<{ isBackendAvailable: boolean; ok: boolean; data: any }> {
+  try {
+    const res = await fetch(url, init);
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return { isBackendAvailable: false, ok: false, data: null };
+    }
+    const data = await res.json();
+    return { isBackendAvailable: true, ok: res.ok, data };
+  } catch {
+    return { isBackendAvailable: false, ok: false, data: null };
+  }
+}
+
 // Optional helper to trigger browser password manager
 const saveToBrowserCredentialManager = async (identifier: string, password?: string, name?: string) => {
   try {
@@ -125,13 +221,47 @@ export const api = {
     targetExam?: string;
     targetCourse?: string;
   }, rememberMe = true): Promise<{ token: string; user: User }> => {
-    const res = await fetch('/api/auth/register', {
+    const backend = await fetchBackendJson('/api/auth/register', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
     });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || 'Registration failed');
+
+    let result: { token: string; user: User };
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Registration failed');
+      result = backend.data;
+    } else {
+      // Static hosting fallback (e.g. Netlify)
+      const directory = loadLocalUsersDirectory();
+      const emailNorm = data.email.trim().toLowerCase();
+      const phoneNorm = data.phone ? normalizePhoneForAuth(data.phone) : undefined;
+      if (directory.some(u => u.email.toLowerCase() === emailNorm)) {
+        throw new Error('An account with this email address already exists. Please use the Log In tab.');
+      }
+      const isDefaultAdmin = emailNorm === 'luvkidjaja@gmail.com';
+      const newUser: LocalStoredUser = {
+        id: `stu_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: data.name.trim(),
+        email: emailNorm,
+        phone: phoneNorm,
+        password: data.password,
+        role: isDefaultAdmin ? 'admin' : 'student',
+        educationLevel: data.educationLevel,
+        targetExam: (data.targetExam as any) || 'JAMB',
+        targetCourse: data.targetCourse || '',
+        premiumPlan: isDefaultAdmin ? 'premium' : 'free',
+        createdAt: new Date().toISOString(),
+        xp: 100,
+        streakDays: 1,
+        stats: { questionsAnswered: 0, averageScore: 0, bestScore: 0, weakestSubject: 'None' }
+      };
+      directory.push(newUser);
+      saveLocalUsersDirectory(directory);
+      const { password: _, ...safeUser } = newUser;
+      result = { token: `local_jwt_${newUser.id}_${Date.now()}`, user: safeUser };
+    }
+
     authStorage.setToken(result.token);
     authStorage.setUser(result.user);
 
@@ -150,13 +280,35 @@ export const api = {
   },
 
   login: async (identifierOrEmail: string, password: string, rememberMe = true): Promise<{ token: string; user: User }> => {
-    const res = await fetch('/api/auth/login', {
+    const backend = await fetchBackendJson('/api/auth/login', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ identifier: identifierOrEmail, email: identifierOrEmail, password })
     });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || 'Login failed');
+
+    let result: { token: string; user: User };
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Login failed');
+      result = backend.data;
+    } else {
+      // Static hosting fallback (e.g. Netlify)
+      const directory = loadLocalUsersDirectory();
+      const targetLower = identifierOrEmail.trim().toLowerCase();
+      const cleanPhone = normalizePhoneForAuth(identifierOrEmail);
+      const matched = directory.find(u =>
+        u.email.toLowerCase() === targetLower ||
+        (cleanPhone.length >= 10 && u.phone && normalizePhoneForAuth(u.phone) === cleanPhone)
+      );
+      if (!matched) {
+        throw new Error('Access Denied: No account found with this email or phone number on this device. Please register or sign in with Google.');
+      }
+      if (matched.password && matched.password !== password) {
+        throw new Error('Access Denied: Incorrect password. Please check your password and try again.');
+      }
+      const { password: _, ...safeUser } = matched;
+      result = { token: `local_jwt_${matched.id}_${Date.now()}`, user: safeUser };
+    }
+
     authStorage.setToken(result.token);
     authStorage.setUser(result.user);
 
@@ -171,6 +323,50 @@ export const api = {
       });
       saveToBrowserCredentialManager(identifierOrEmail, password, result.user?.name);
     }
+    return result;
+  },
+
+  syncGoogleUser: async (userData: {
+    id: string;
+    email: string;
+    name?: string;
+    educationLevel?: string;
+    targetExam?: string;
+    targetCourse?: string;
+    photoURL?: string;
+  }): Promise<{ token: string; user: User }> => {
+    const backend = await fetchBackendJson('/api/auth/google-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+
+    let result: { token: string; user: User };
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to sync Google user session');
+      result = backend.data;
+    } else {
+      const emailNorm = userData.email.trim().toLowerCase();
+      const isDefaultAdmin = emailNorm === 'luvkidjaja@gmail.com';
+      const syncedUser: User = {
+        id: userData.id,
+        name: userData.name || 'Nigerian Scholar',
+        email: emailNorm,
+        role: isDefaultAdmin ? 'admin' : 'student',
+        educationLevel: (userData.educationLevel as any) || 'secondary',
+        targetExam: (userData.targetExam as any) || 'JAMB',
+        targetCourse: userData.targetCourse || 'General Studies',
+        premiumPlan: isDefaultAdmin ? 'premium' : 'free',
+        createdAt: new Date().toISOString(),
+        xp: 100,
+        streakDays: 1,
+        stats: { questionsAnswered: 0, averageScore: 0, bestScore: 0, weakestSubject: 'None' }
+      };
+      result = { token: `firebase_session_${syncedUser.id}`, user: syncedUser };
+    }
+
+    authStorage.setToken(result.token);
+    authStorage.setUser(result.user);
     return result;
   },
 
@@ -189,10 +385,13 @@ export const api = {
         return null;
       }
 
-      const res = await fetch('/api/auth/me', {
+      const backend = await fetchBackendJson('/api/auth/me', {
         headers: getHeaders(false)
       });
-      if (!res.ok) {
+      if (!backend.isBackendAvailable) {
+        return authStorage.getUser();
+      }
+      if (!backend.ok) {
         // Token might have expired, try auto-login from saved credentials
         const saved = authStorage.getSavedCredentials();
         if (saved && saved.rememberMe && saved.identifier && saved.password) {
@@ -203,9 +402,8 @@ export const api = {
         }
         return authStorage.getUser();
       }
-      const data = await res.json();
-      if (data.user) authStorage.setUser(data.user);
-      return data.user;
+      if (backend.data?.user) authStorage.setUser(backend.data.user);
+      return backend.data?.user || authStorage.getUser();
     } catch {
       // Offline / network failure: gracefully return cached user so student is not locked out
       return authStorage.getUser();
@@ -245,13 +443,31 @@ export const api = {
   },
 
   recoverAccountByPhone: async (identifier: string, newPassword: string): Promise<{ token: string; user: User; message: string }> => {
-    const res = await fetch('/api/auth/recover-phone', {
+    const backend = await fetchBackendJson('/api/auth/recover-phone', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ identifier, newPassword })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Account recovery failed');
+    let data: { token: string; user: User; message: string };
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Account recovery failed');
+      data = backend.data;
+    } else {
+      const directory = loadLocalUsersDirectory();
+      const targetLower = identifier.trim().toLowerCase();
+      const cleanPhone = normalizePhoneForAuth(identifier);
+      const matched = directory.find(u =>
+        u.email.toLowerCase() === targetLower ||
+        (cleanPhone.length >= 10 && u.phone && normalizePhoneForAuth(u.phone) === cleanPhone)
+      );
+      if (!matched) {
+        throw new Error('No registered account found with that phone number or email on this device.');
+      }
+      matched.password = newPassword;
+      saveLocalUsersDirectory(directory);
+      const { password: _, ...safeUser } = matched;
+      data = { token: `local_jwt_${matched.id}_${Date.now()}`, user: safeUser, message: 'Password reset successfully.' };
+    }
     authStorage.setToken(data.token);
     authStorage.setUser(data.user);
     authStorage.setSavedCredentials({
@@ -430,14 +646,56 @@ export const api = {
     integrityViolated?: boolean;
     speedBonusPoints?: number;
   }): Promise<ExamResult> => {
-    const res = await fetch('/api/exams/submit', {
+    const backend = await fetchBackendJson('/api/exams/submit', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to submit exam');
-    return data.result;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to submit exam');
+      return backend.data.result;
+    }
+
+    // Client-side grading fallback for static hosting (e.g., Netlify)
+    const currentUser = authStorage.getUser();
+    const totalQuestions = payload.answers.length || 1;
+    let correctCount = 0;
+    const toOption = (val?: string | null): 'A' | 'B' | 'C' | 'D' =>
+      val === 'A' || val === 'B' || val === 'C' || val === 'D' ? val : 'A';
+    const evaluatedAnswers = payload.answers.map(ans => {
+      const q = INITIAL_QUESTIONS.find(item => item.id === ans.questionId);
+      const correctOpt = toOption(ans.correctOption || q?.correctOption);
+      const selectedOpt = toOption(ans.selectedOption);
+      const isCorrect = ans.selectedOption === correctOpt;
+      if (isCorrect) correctCount++;
+      return {
+        questionId: ans.questionId,
+        selectedOption: selectedOpt,
+        correctOption: correctOpt,
+        isCorrect
+      };
+    });
+    const scorePercentage = Math.round((correctCount / totalQuestions) * 100);
+    const resolvedExamType: ExamResult['examType'] =
+      payload.examType === 'WAEC' || payload.examType === 'COMMON_ENTRANCE' || payload.examType === 'UNIVERSITY_GST'
+        ? payload.examType
+        : 'JAMB';
+    const jambScore = resolvedExamType === 'JAMB' ? Math.round((scorePercentage / 100) * 400) : undefined;
+    return {
+      id: `exam_${Date.now()}`,
+      userId: currentUser?.id || 'local_scholar',
+      examType: resolvedExamType,
+      title: `${resolvedExamType} Mock Examination`,
+      date: new Date().toISOString(),
+      durationMinutes: payload.durationMinutes,
+      timeSpentSeconds: payload.timeSpentSeconds,
+      totalQuestions,
+      correctCount,
+      scorePercentage,
+      jambScore,
+      subjectScores: [],
+      answers: evaluatedAnswers
+    };
   },
 
   // Dashboard

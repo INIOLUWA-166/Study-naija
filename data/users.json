@@ -93,7 +93,9 @@
     "verifiedExamsCount": 2,
     "integrityScore": 71,
     "verifiedSession": false,
-    "flaggedExamsCount": 1
+    "flaggedExamsCount": 1,
+    "welcomeEmailSent": true,
+    "welcomeEmailSentAt": "2026-11-10T17:18:59.684Z"
   },
   {
     "id": "user-1790957541858-x8b3u",

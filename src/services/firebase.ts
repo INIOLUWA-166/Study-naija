@@ -5,6 +5,9 @@ import {
   signInWithPopup, 
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+  signInWithCredential,
   User as FirebaseUser
 } from 'firebase/auth';
 
@@ -32,14 +35,25 @@ export const app = initializeApp(firebaseConfig);
 // CRITICAL: Initialize Firestore with firestoreDatabaseId from firebase-applet-config.json
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Firebase Authentication
+// Initialize Firebase Authentication with explicit browserLocalPersistence
 export const auth = getAuth(app);
 
-// Google Auth Provider configured for secure identification
+// Guarantee user session state persists permanently in browser localStorage across reloads
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('[Firebase Auth] Persistence initialization notice:', err?.message || err);
+  });
+}
+
+// Google Auth Provider configured with verified OAuth Client ID and select_account prompt
 export const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.setCustomParameters({
-  prompt: 'select_account'
+  prompt: 'select_account',
+  client_id: firebaseConfig.oAuthClientId
 });
+googleAuthProvider.addScope('email');
+googleAuthProvider.addScope('profile');
+googleAuthProvider.addScope('openid');
 
 // Operation Types for error diagnosis
 export enum OperationType {
@@ -191,10 +205,101 @@ export async function signInWithGoogle(): Promise<{ firebaseUser: FirebaseUser; 
   } catch (error: any) {
     console.error('Google Sign-In failed:', error);
     if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
-      throw new Error(`Google Sign-In is not authorized for domain (${window.location.hostname}). Please sign in or register below using your Email and Password.`);
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+      const customError: any = new Error(
+        `Firebase Google Sign-In is not authorized for domain (${hostname}). In Firebase Console (ai-studio-applet-webapp-5f671) -> Authentication -> Settings -> Authorized domains, add "${hostname}". In the meantime, you can log in or register below using your Phone Number or Email & Password.`
+      );
+      customError.code = 'auth/unauthorized-domain';
+      customError.hostname = hostname;
+      throw customError;
     }
     throw error;
   }
+}
+
+/**
+ * Sign in using Google ID Token / Credential (e.g. from Google Identity Services)
+ */
+export async function signInWithGoogleIdToken(idToken: string): Promise<{ firebaseUser: FirebaseUser; user: AppUser }> {
+  const credential = GoogleAuthProvider.credential(idToken);
+  const result = await signInWithCredential(auth, credential);
+  const fbUser = result.user;
+
+  const userDocRef = doc(db, 'users', fbUser.uid);
+  let appUser: AppUser;
+
+  try {
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      appUser = {
+        id: fbUser.uid,
+        name: data.name || fbUser.displayName || 'Scholar',
+        email: fbUser.email || data.email || '',
+        role: data.role || (fbUser.email === 'luvkidjaja@gmail.com' ? 'admin' : 'student'),
+        educationLevel: data.educationLevel || 'secondary',
+        targetExam: data.targetExam || 'JAMB',
+        targetCourse: data.targetCourse || 'General Studies',
+        premiumPlan: data.premiumPlan || 'free',
+        createdAt: data.createdAt || new Date().toISOString(),
+        xp: data.xp || 50,
+        streakDays: data.streakDays || 1,
+        lastActiveDate: new Date().toISOString(),
+        stats: data.stats || {
+          questionsAnswered: 0,
+          averageScore: 0,
+          bestScore: 0,
+          weakestSubject: 'None'
+        }
+      };
+      await updateDoc(userDocRef, {
+        lastActiveDate: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      const isDefaultAdmin = fbUser.email === 'luvkidjaja@gmail.com';
+      appUser = {
+        id: fbUser.uid,
+        name: fbUser.displayName || 'Nigerian Scholar',
+        email: fbUser.email || '',
+        role: isDefaultAdmin ? 'admin' : 'student',
+        educationLevel: 'secondary',
+        targetExam: 'JAMB',
+        targetCourse: 'General Studies',
+        premiumPlan: isDefaultAdmin ? 'premium' : 'free',
+        createdAt: new Date().toISOString(),
+        xp: 100,
+        streakDays: 1,
+        lastActiveDate: new Date().toISOString(),
+        stats: {
+          questionsAnswered: 0,
+          averageScore: 0,
+          bestScore: 0,
+          weakestSubject: 'None'
+        }
+      };
+      await setDoc(userDocRef, {
+        id: appUser.id,
+        name: appUser.name,
+        email: appUser.email,
+        role: appUser.role,
+        educationLevel: appUser.educationLevel,
+        targetExam: appUser.targetExam,
+        targetCourse: appUser.targetCourse,
+        premiumPlan: appUser.premiumPlan,
+        createdAt: appUser.createdAt,
+        xp: appUser.xp,
+        streakDays: appUser.streakDays,
+        lastActiveDate: appUser.lastActiveDate,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  } catch (fsErr) {
+    handleFirestoreError(fsErr, OperationType.WRITE, `users/${fbUser.uid}`);
+    throw fsErr;
+  }
+
+  return { firebaseUser: fbUser, user: appUser };
 }
 
 /**

@@ -40,22 +40,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
     setError(null);
     try {
       const { firebaseUser, user: appUser } = await signInWithGoogle();
-      const token = await firebaseUser.getIdToken();
-      authStorage.setToken(token);
-      authStorage.setUser(appUser);
 
-      const firstName = getStudentFirstName(appUser.name);
+      let finalUser: UserType = appUser;
+      try {
+        const syncRes = await api.syncGoogleUser({
+          id: appUser.id,
+          email: appUser.email,
+          name: appUser.name,
+          educationLevel: appUser.educationLevel,
+          targetExam: appUser.targetExam,
+          targetCourse: appUser.targetCourse
+        });
+        finalUser = syncRes.user;
+      } catch (syncErr) {
+        console.warn('[Google Auth Modal] Backend sync notice:', syncErr);
+        const token = await firebaseUser.getIdToken();
+        authStorage.setToken(token);
+        authStorage.setUser(appUser);
+      }
+
+      const firstName = getStudentFirstName(finalUser.name);
       if (firstName) {
         setStoredFirstName(firstName);
         setTimeout(() => {
           aiVoice.speakWelcomeGreeting(firstName);
         }, 300);
       }
-      studentNotificationManager.check24HourInactivity(appUser);
-      (onAuthSuccess || onSuccess)?.(appUser);
+      studentNotificationManager.check24HourInactivity(finalUser);
+      (onAuthSuccess || onSuccess)?.(finalUser);
       onClose();
     } catch (err: any) {
-      if (err?.code !== 'auth/popup-closed-by-user') {
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+        setError(`Google Sign-In domain authorization needed for "${host}" in Firebase Console. Please sign in below using your Phone Number or Email.`);
+      } else if (err?.code !== 'auth/popup-closed-by-user') {
         setError(err?.message || 'Google Sign-In failed. Please try again.');
       }
     } finally {
@@ -91,9 +109,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         return;
       }
     } else {
-      if (!email.trim() || !emailRegex.test(email.trim().toLowerCase())) {
-        setError('Please enter a valid email address.');
-        return;
+      const trimmed = email.trim();
+      const isEmail = trimmed.includes('@');
+      if (isEmail) {
+        if (!emailRegex.test(trimmed.toLowerCase())) {
+          setError('Please enter a valid email address.');
+          return;
+        }
+      } else {
+        const cleanPhone = trimmed.replace(/\D/g, '');
+        if (cleanPhone.length < 10) {
+          setError('Please enter a valid email address or 11-digit Nigerian phone number.');
+          return;
+        }
       }
       if (!password) {
         setError('Password is required.');
@@ -105,7 +133,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
 
     try {
       if (mode === 'login') {
-        const res = await api.login(email.trim().toLowerCase(), password);
+        const res = await api.login(email.trim(), password);
         const firstName = getStudentFirstName(res.user?.name);
         if (firstName) {
           setStoredFirstName(firstName);
