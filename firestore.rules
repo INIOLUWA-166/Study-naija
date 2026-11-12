@@ -34,7 +34,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'luvkidjaja@gmail.com' ||
+        (request.auth.token.email_verified == true && request.auth.token.email == 'luvkidjaja@gmail.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
@@ -43,7 +43,7 @@ service cloud.firestore {
     function isValidUserProfile(data) {
       return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.email is string && data.email.size() > 0 && data.email.size() <= 128 &&
+             data.email is string && data.email.size() <= 128 &&
              data.role in ['student', 'admin'] &&
              data.targetExam in ['JAMB', 'WAEC', 'NECO', 'BOTH', 'COMMON_ENTRANCE', 'UNIVERSITY_GST'] &&
              data.educationLevel in ['primary', 'secondary', 'university'] &&
@@ -140,7 +140,7 @@ service cloud.firestore {
       allow create: if isOwner(userId) &&
         isValidId(userId) &&
         incoming().id == userId &&
-        incoming().role == 'student' &&
+        (incoming().role == 'student' || (incoming().role == 'admin' && isAdmin())) &&
         isValidUserProfile(incoming());
 
       allow update: if (isOwner(userId) || isAdmin()) &&

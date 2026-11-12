@@ -115,6 +115,94 @@ export async function testFirestoreConnection() {
 }
 testFirestoreConnection();
 
+function resolveFirebaseEmail(fbUser: FirebaseUser, tokenResponseEmail?: string): string {
+  const providerEmail = fbUser.providerData?.find(p => Boolean(p?.email))?.email;
+  return (fbUser.email || providerEmail || tokenResponseEmail || '').trim().slice(0, 128);
+}
+
+async function upsertGoogleUserInFirestore(fbUser: FirebaseUser, tokenResponseEmail?: string): Promise<AppUser> {
+  const resolvedEmail = resolveFirebaseEmail(fbUser, tokenResponseEmail);
+  const resolvedName = (fbUser.displayName || 'Nigerian Scholar').trim().slice(0, 100) || 'Nigerian Scholar';
+  const userDocRef = doc(db, 'users', fbUser.uid);
+
+  try {
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const effectiveEmail = (resolvedEmail || data.email || '').trim().slice(0, 128);
+      const isVerifiedAdmin = effectiveEmail.toLowerCase() === 'luvkidjaja@gmail.com' && fbUser.emailVerified === true;
+      const appUser: AppUser = {
+        id: fbUser.uid,
+        name: (data.name || resolvedName).slice(0, 100),
+        email: effectiveEmail,
+        role: data.role || (isVerifiedAdmin ? 'admin' : 'student'),
+        educationLevel: data.educationLevel || 'secondary',
+        targetExam: data.targetExam || 'JAMB',
+        targetCourse: (data.targetCourse || 'General Studies').slice(0, 150),
+        premiumPlan: data.premiumPlan || 'free',
+        createdAt: data.createdAt || new Date().toISOString(),
+        xp: typeof data.xp === 'number' ? data.xp : 50,
+        streakDays: typeof data.streakDays === 'number' ? data.streakDays : 1,
+        lastActiveDate: new Date().toISOString(),
+        stats: data.stats || {
+          questionsAnswered: 0,
+          averageScore: 0,
+          bestScore: 0,
+          weakestSubject: 'None'
+        }
+      };
+      await updateDoc(userDocRef, {
+        lastActiveDate: appUser.lastActiveDate,
+        updatedAt: new Date().toISOString(),
+        ...(effectiveEmail && !data.email ? { email: effectiveEmail } : {})
+      });
+      return appUser;
+    } else {
+      const isVerifiedAdmin = resolvedEmail.toLowerCase() === 'luvkidjaja@gmail.com' && fbUser.emailVerified === true;
+      const appUser: AppUser = {
+        id: fbUser.uid,
+        name: resolvedName,
+        email: resolvedEmail,
+        role: isVerifiedAdmin ? 'admin' : 'student',
+        educationLevel: 'secondary',
+        targetExam: 'JAMB',
+        targetCourse: 'General Studies',
+        premiumPlan: isVerifiedAdmin ? 'premium' : 'free',
+        createdAt: new Date().toISOString(),
+        xp: 100,
+        streakDays: 1,
+        lastActiveDate: new Date().toISOString(),
+        stats: {
+          questionsAnswered: 0,
+          averageScore: 0,
+          bestScore: 0,
+          weakestSubject: 'None'
+        }
+      };
+
+      await setDoc(userDocRef, {
+        id: appUser.id,
+        name: appUser.name,
+        email: appUser.email,
+        role: appUser.role,
+        educationLevel: appUser.educationLevel,
+        targetExam: appUser.targetExam,
+        targetCourse: appUser.targetCourse,
+        premiumPlan: appUser.premiumPlan,
+        createdAt: appUser.createdAt,
+        xp: appUser.xp,
+        streakDays: appUser.streakDays,
+        lastActiveDate: appUser.lastActiveDate,
+        updatedAt: new Date().toISOString()
+      });
+      return appUser;
+    }
+  } catch (fsErr) {
+    handleFirestoreError(fsErr, OperationType.WRITE, `users/${fbUser.uid}`);
+    throw fsErr;
+  }
+}
+
 /**
  * Perform Google Sign-In with popup
  */
@@ -122,85 +210,8 @@ export async function signInWithGoogle(): Promise<{ firebaseUser: FirebaseUser; 
   try {
     const result = await signInWithPopup(auth, googleAuthProvider);
     const fbUser = result.user;
-
-    // Check if user document already exists in Firestore
-    const userDocRef = doc(db, 'users', fbUser.uid);
-    let appUser: AppUser;
-
-    try {
-      const snap = await getDoc(userDocRef);
-      if (snap.exists()) {
-        const data = snap.data();
-        appUser = {
-          id: fbUser.uid,
-          name: data.name || fbUser.displayName || 'Scholar',
-          email: fbUser.email || data.email || '',
-          role: data.role || (fbUser.email === 'luvkidjaja@gmail.com' ? 'admin' : 'student'),
-          educationLevel: data.educationLevel || 'secondary',
-          targetExam: data.targetExam || 'JAMB',
-          targetCourse: data.targetCourse || 'General Studies',
-          premiumPlan: data.premiumPlan || 'free',
-          createdAt: data.createdAt || new Date().toISOString(),
-          xp: data.xp || 50,
-          streakDays: data.streakDays || 1,
-          lastActiveDate: new Date().toISOString(),
-          stats: data.stats || {
-            questionsAnswered: 0,
-            averageScore: 0,
-            bestScore: 0,
-            weakestSubject: 'None'
-          }
-        };
-        // Update lastActiveDate
-        await updateDoc(userDocRef, {
-          lastActiveDate: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      } else {
-        // Create brand new user in Firestore
-        const isDefaultAdmin = fbUser.email === 'luvkidjaja@gmail.com';
-        appUser = {
-          id: fbUser.uid,
-          name: fbUser.displayName || 'Nigerian Scholar',
-          email: fbUser.email || '',
-          role: isDefaultAdmin ? 'admin' : 'student',
-          educationLevel: 'secondary',
-          targetExam: 'JAMB',
-          targetCourse: 'General Studies',
-          premiumPlan: isDefaultAdmin ? 'premium' : 'free',
-          createdAt: new Date().toISOString(),
-          xp: 100,
-          streakDays: 1,
-          lastActiveDate: new Date().toISOString(),
-          stats: {
-            questionsAnswered: 0,
-            averageScore: 0,
-            bestScore: 0,
-            weakestSubject: 'None'
-          }
-        };
-
-        await setDoc(userDocRef, {
-          id: appUser.id,
-          name: appUser.name,
-          email: appUser.email,
-          role: appUser.role,
-          educationLevel: appUser.educationLevel,
-          targetExam: appUser.targetExam,
-          targetCourse: appUser.targetCourse,
-          premiumPlan: appUser.premiumPlan,
-          createdAt: appUser.createdAt,
-          xp: appUser.xp,
-          streakDays: appUser.streakDays,
-          lastActiveDate: appUser.lastActiveDate,
-          updatedAt: new Date().toISOString()
-        });
-      }
-    } catch (fsErr) {
-      handleFirestoreError(fsErr, OperationType.WRITE, `users/${fbUser.uid}`);
-      throw fsErr;
-    }
-
+    const tokenEmail = (result as any)?._tokenResponse?.email as string | undefined;
+    const appUser = await upsertGoogleUserInFirestore(fbUser, tokenEmail);
     return { firebaseUser: fbUser, user: appUser };
   } catch (error: any) {
     console.error('Google Sign-In failed:', error);
@@ -224,81 +235,8 @@ export async function signInWithGoogleIdToken(idToken: string): Promise<{ fireba
   const credential = GoogleAuthProvider.credential(idToken);
   const result = await signInWithCredential(auth, credential);
   const fbUser = result.user;
-
-  const userDocRef = doc(db, 'users', fbUser.uid);
-  let appUser: AppUser;
-
-  try {
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      appUser = {
-        id: fbUser.uid,
-        name: data.name || fbUser.displayName || 'Scholar',
-        email: fbUser.email || data.email || '',
-        role: data.role || (fbUser.email === 'luvkidjaja@gmail.com' ? 'admin' : 'student'),
-        educationLevel: data.educationLevel || 'secondary',
-        targetExam: data.targetExam || 'JAMB',
-        targetCourse: data.targetCourse || 'General Studies',
-        premiumPlan: data.premiumPlan || 'free',
-        createdAt: data.createdAt || new Date().toISOString(),
-        xp: data.xp || 50,
-        streakDays: data.streakDays || 1,
-        lastActiveDate: new Date().toISOString(),
-        stats: data.stats || {
-          questionsAnswered: 0,
-          averageScore: 0,
-          bestScore: 0,
-          weakestSubject: 'None'
-        }
-      };
-      await updateDoc(userDocRef, {
-        lastActiveDate: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-    } else {
-      const isDefaultAdmin = fbUser.email === 'luvkidjaja@gmail.com';
-      appUser = {
-        id: fbUser.uid,
-        name: fbUser.displayName || 'Nigerian Scholar',
-        email: fbUser.email || '',
-        role: isDefaultAdmin ? 'admin' : 'student',
-        educationLevel: 'secondary',
-        targetExam: 'JAMB',
-        targetCourse: 'General Studies',
-        premiumPlan: isDefaultAdmin ? 'premium' : 'free',
-        createdAt: new Date().toISOString(),
-        xp: 100,
-        streakDays: 1,
-        lastActiveDate: new Date().toISOString(),
-        stats: {
-          questionsAnswered: 0,
-          averageScore: 0,
-          bestScore: 0,
-          weakestSubject: 'None'
-        }
-      };
-      await setDoc(userDocRef, {
-        id: appUser.id,
-        name: appUser.name,
-        email: appUser.email,
-        role: appUser.role,
-        educationLevel: appUser.educationLevel,
-        targetExam: appUser.targetExam,
-        targetCourse: appUser.targetCourse,
-        premiumPlan: appUser.premiumPlan,
-        createdAt: appUser.createdAt,
-        xp: appUser.xp,
-        streakDays: appUser.streakDays,
-        lastActiveDate: appUser.lastActiveDate,
-        updatedAt: new Date().toISOString()
-      });
-    }
-  } catch (fsErr) {
-    handleFirestoreError(fsErr, OperationType.WRITE, `users/${fbUser.uid}`);
-    throw fsErr;
-  }
-
+  const tokenEmail = (result as any)?._tokenResponse?.email as string | undefined;
+  const appUser = await upsertGoogleUserInFirestore(fbUser, tokenEmail);
   return { firebaseUser: fbUser, user: appUser };
 }
 

@@ -335,10 +335,11 @@ export const api = {
     targetCourse?: string;
     photoURL?: string;
   }): Promise<{ token: string; user: User }> => {
+    const safeEmail = (userData.email || '').trim().toLowerCase() || `${userData.id}@google.studynaija.ng`;
     const backend = await fetchBackendJson('/api/auth/google-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
+      body: JSON.stringify({ ...userData, email: safeEmail })
     });
 
     let result: { token: string; user: User };
@@ -346,12 +347,11 @@ export const api = {
       if (!backend.ok) throw new Error(backend.data?.error || 'Failed to sync Google user session');
       result = backend.data;
     } else {
-      const emailNorm = userData.email.trim().toLowerCase();
-      const isDefaultAdmin = emailNorm === 'luvkidjaja@gmail.com';
+      const isDefaultAdmin = safeEmail === 'luvkidjaja@gmail.com';
       const syncedUser: User = {
         id: userData.id,
         name: userData.name || 'Nigerian Scholar',
-        email: emailNorm,
+        email: safeEmail,
         role: isDefaultAdmin ? 'admin' : 'student',
         educationLevel: (userData.educationLevel as any) || 'secondary',
         targetExam: (userData.targetExam as any) || 'JAMB',
