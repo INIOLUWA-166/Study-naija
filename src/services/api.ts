@@ -412,23 +412,28 @@ export const api = {
 
   // Device Transfer & Multi-Device Sync
   createDeviceSyncCode: async (): Promise<{ code: string; expiresAt: string; expiresInMinutes?: number; email: string; phone?: string }> => {
-    const res = await fetch('/api/auth/device-sync/create', {
+    const backend = await fetchBackendJson('/api/auth/device-sync/create', {
       method: 'POST',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to create device sync code');
-    return data;
+    if (!backend.isBackendAvailable) {
+      throw new Error('Device transfer codes require the live backend server. On Netlify, please sign in using Continue with Google or your Email & Password.');
+    }
+    if (!backend.ok) throw new Error(backend.data?.error || 'Failed to create device sync code');
+    return backend.data;
   },
 
   verifyDeviceSyncCode: async (code: string): Promise<{ token: string; user: User }> => {
-    const res = await fetch('/api/auth/device-sync/verify', {
+    const backend = await fetchBackendJson('/api/auth/device-sync/verify', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ code })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Invalid or expired sync code');
+    if (!backend.isBackendAvailable) {
+      throw new Error('Device transfer codes require the live backend server. On Netlify, please sign in using Continue with Google or your Email & Password.');
+    }
+    const data = backend.data;
+    if (!backend.ok) throw new Error(data?.error || 'Invalid or expired sync code');
     authStorage.setToken(data.token);
     authStorage.setUser(data.user);
     // Remember the user on this new device

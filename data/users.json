@@ -51,7 +51,9 @@
     "verifiedSession": true,
     "totalTabSwitches": 0,
     "flaggedExamsCount": 0,
-    "verifiedExamsCount": 4
+    "verifiedExamsCount": 4,
+    "welcomeEmailSent": true,
+    "welcomeEmailSentAt": "2026-11-13T00:06:44.678Z"
   },
   {
     "id": "user-student-demo",
