@@ -893,4 +893,37 @@ export interface AdminAiMessage {
   suggestedActionPayload?: any;
 }
 
+export interface StudyPathModule {
+  id: string;
+  subjectId: string;
+  subjectName: string;
+  priority: 'critical' | 'high' | 'recommended';
+  reason: string;
+  topics: string[];
+  questionCount: number;
+  estimatedMinutes: number;
+  questionsUrl: string;
+}
+
+export interface PersonalizedStudyPath {
+  id: string;
+  studentId: string;
+  studentName: string;
+  educationLevel: 'primary' | 'secondary' | 'university';
+  targetExam: string;
+  targetCourse?: string;
+  weakestSubject: string;
+  title: string;
+  cacheUrl: string;
+  prefetchUrls: string[];
+  modules: StudyPathModule[];
+  questions: Question[];
+  totalTopics: number;
+  totalQuestions: number;
+  estimatedSizeKb: number;
+  generatedAt: string;
+  source?: 'network' | 'service-worker-cache' | 'offline-generator';
+}
+
+
 

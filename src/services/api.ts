@@ -560,12 +560,29 @@ export const api = {
       const res = await fetch(`/api/questions?${query.toString()}`, {
         headers: getHeaders(false)
       });
-      if (!res.ok) throw new Error();
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) throw new Error();
       return await res.json();
     } catch {
       const currentUser = authStorage.getUser();
       const level = params?.level || currentUser?.educationLevel;
-      let filtered = [...INITIAL_QUESTIONS];
+
+      let pool: Question[] = [...INITIAL_QUESTIONS];
+      if (params?.subjectId && params.subjectId !== 'all') {
+        try {
+          const { studyPathCacheManager } = await import('../utils/studyPathCache');
+          const { offlinePacksManager } = await import('../utils/offlinePacksManager');
+          const swCached = await studyPathCacheManager.getCachedQuestionsForSubject(params.subjectId);
+          const packCached = offlinePacksManager.getOfflineQuestions(params.subjectId);
+          const merged = new Map<string, Question>();
+          [...swCached, ...packCached, ...pool].forEach(q => {
+            if (q && q.id && !merged.has(q.id)) merged.set(q.id, q);
+          });
+          pool = Array.from(merged.values());
+        } catch {}
+      }
+
+      let filtered = pool;
       if (level && level !== 'all') {
         filtered = filtered.filter(q => !q.educationLevel || q.educationLevel === level);
       }
@@ -581,7 +598,7 @@ export const api = {
       if (params?.difficulty && params.difficulty !== 'All' && params.difficulty !== 'all') {
         filtered = filtered.filter(q => q.difficulty?.toLowerCase() === params.difficulty!.toLowerCase());
       }
-      return { questions: filtered.slice(0, 50), total: filtered.length };
+      return { questions: filtered.slice(0, 100), total: filtered.length };
     }
   },
 

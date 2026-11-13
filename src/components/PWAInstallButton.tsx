@@ -11,6 +11,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ className = 
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const [showManualHint, setShowManualHint] = useState(false);
 
   // If already running as standalone app, don't show prompt
   if (isInstalled) {
@@ -119,22 +120,29 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ className = 
   // Fallback info button in drawer/card to guide user if browser has not yet fired prompt
   if (variant === 'card') {
     return (
-      <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/40 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0">
-            <Smartphone className="w-4 h-4" />
+      <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/40 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0">
+              <Smartphone className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200 block">StudyNaija Mobile App</span>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Practice past questions with zero data</span>
+            </div>
           </div>
-          <div>
-            <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200 block">StudyNaija Mobile App</span>
-            <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Practice past questions with zero data</span>
-          </div>
+          <button
+            onClick={() => setShowManualHint(prev => !prev)}
+            className="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-[11px] font-semibold hover:bg-emerald-800 transition cursor-pointer"
+          >
+            Install
+          </button>
         </div>
-        <button
-          onClick={() => alert("To install StudyNaija: Tap your browser's menu (⋮ or Share) and select 'Install app' or 'Add to Home screen'.")}
-          className="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-[11px] font-semibold hover:bg-emerald-800 transition cursor-pointer"
-        >
-          Install
-        </button>
+        {showManualHint && (
+          <p className="text-[11px] text-emerald-900 dark:text-emerald-200 bg-white/80 dark:bg-slate-900/70 rounded-xl px-3 py-2 border border-emerald-200 dark:border-emerald-800/50">
+            Tap your browser menu (⋮ or Share) and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+          </p>
+        )}
       </div>
     );
   }

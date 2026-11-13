@@ -1,6 +1,6 @@
 {
   "packageId": "ng.studynaija.cbt",
-  "host": "ais-dev-gzv2pvb2kgukji4zp6pwqy-794299243767.europe-west2.run.app",
+  "host": "studynaija10.netlify.app",
   "name": "StudyNaija - JAMB & WAEC CBT Exam Prep",
   "launcherName": "StudyNaija",
   "themeColor": "#047857",
@@ -16,7 +16,7 @@
     "alias": "studynaija-key"
   },
   "generatorApp": "StudyNaija PWA Store Packager",
-  "webManifestUrl": "https://ais-dev-gzv2pvb2kgukji4zp6pwqy-794299243767.europe-west2.run.app/manifest.json",
+  "webManifestUrl": "https://studynaija10.netlify.app/manifest.json",
   "fallbackType": "customtabs",
   "features": {
     "playBilling": {

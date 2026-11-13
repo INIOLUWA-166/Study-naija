@@ -2320,6 +2320,98 @@ app.get('/api/questions', optionalAuth, (req, res) => {
   });
 });
 
+// 7b. Personalized Study Path bundle (cacheable by Service Worker for offline study)
+app.get('/api/study-paths/personalized', optionalAuth, (req, res) => {
+  const user = (req as any).user;
+  const studentId = String(req.query.studentId || user?.id || 'guest_student');
+  const studentName = String(req.query.studentName || user?.name || 'Nigerian Scholar');
+  const levelParam = String(req.query.level || user?.educationLevel || 'secondary') as 'primary' | 'secondary' | 'university';
+  const targetExam = String(req.query.exam || user?.targetExam || (levelParam === 'primary' ? 'COMMON_ENTRANCE' : levelParam === 'university' ? 'UNIVERSITY_GST' : 'JAMB'));
+  const targetCourse = String(req.query.targetCourse || user?.targetCourse || 'General Studies');
+  const weakSubjectQuery = String(req.query.weakSubject || user?.stats?.weakestSubject || 'Physics');
+  const requestedSubjects = typeof req.query.subjects === 'string' && req.query.subjects.trim()
+    ? req.query.subjects.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  const levelSubjects = subjects.filter(s => !s.educationLevel || s.educationLevel === levelParam);
+  const weakMatch = levelSubjects.find(
+    s => s.id.toLowerCase() === weakSubjectQuery.toLowerCase() || s.name.toLowerCase().includes(weakSubjectQuery.toLowerCase())
+  );
+
+  const selectedList: typeof levelSubjects = [];
+  const pushUniqueSubject = (sub?: typeof levelSubjects[number]) => {
+    if (sub && !selectedList.some(item => item.id === sub.id)) {
+      selectedList.push(sub);
+    }
+  };
+
+  // Prioritize explicit subjects, then weak subject, then English/Maths + core subjects
+  requestedSubjects.forEach(subId => {
+    pushUniqueSubject(levelSubjects.find(s => s.id.toLowerCase() === subId) || subjects.find(s => s.id.toLowerCase() === subId));
+  });
+  pushUniqueSubject(weakMatch);
+  pushUniqueSubject(levelSubjects.find(s => s.id === 'english' || s.id.includes('english')));
+  pushUniqueSubject(levelSubjects.find(s => s.id === 'mathematics' || s.id === 'maths' || s.id.includes('math')));
+  levelSubjects.forEach(s => {
+    if (selectedList.length < 4) pushUniqueSubject(s);
+  });
+
+  const bundledQuestions: Question[] = [];
+  const seenQIds = new Set<string>();
+  const modules = selectedList.map((sub, idx) => {
+    const subQuestions = questions.filter(q => q.subjectId === sub.id).slice(0, 30);
+    subQuestions.forEach(q => {
+      if (!seenQIds.has(q.id)) {
+        seenQIds.add(q.id);
+        bundledQuestions.push(q);
+      }
+    });
+
+    const isWeak = weakMatch?.id === sub.id;
+    const priority: 'critical' | 'high' | 'recommended' = isWeak ? 'critical' : idx < 2 ? 'high' : 'recommended';
+    return {
+      id: `module-${sub.id}`,
+      subjectId: sub.id,
+      subjectName: sub.name,
+      priority,
+      reason: isWeak
+        ? `Targeted boost for your priority weak subject (${weakSubjectQuery})`
+        : idx === 0 || sub.id === 'english'
+          ? `Compulsory ${targetExam} core foundation`
+          : `Curated ${targetExam} syllabus drill module`,
+      topics: (sub.topics || []).slice(0, 5),
+      questionCount: subQuestions.length,
+      estimatedMinutes: Math.max(20, subQuestions.length * 2),
+      questionsUrl: `/api/questions?subjectId=${encodeURIComponent(sub.id)}&level=${encodeURIComponent(levelParam)}&limit=60&dailyRandomize=false`
+    };
+  });
+
+  const payload = {
+    id: `path-${studentId}-${levelParam}`,
+    studentId,
+    studentName,
+    educationLevel: levelParam,
+    targetExam,
+    targetCourse,
+    weakestSubject: weakMatch?.name || weakSubjectQuery,
+    title: `${targetExam} Personalized Study Path — ${studentName.split(' ')[0]}`,
+    cacheUrl: req.originalUrl,
+    prefetchUrls: modules.map(m => m.questionsUrl),
+    modules,
+    questions: bundledQuestions,
+    totalTopics: modules.reduce((acc, m) => acc + m.topics.length, 0),
+    totalQuestions: bundledQuestions.length,
+    estimatedSizeKb: 0,
+    generatedAt: new Date().toISOString(),
+    source: 'network'
+  };
+
+  payload.estimatedSizeKb = Math.max(8, Math.round(Buffer.byteLength(JSON.stringify(payload), 'utf8') / 1024));
+
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.json(payload);
+});
+
 // 8. Generate Mock Exam
 app.post('/api/exams/generate', optionalAuth, (req, res) => {
   const { examType, selectedSubjects, questionCountPerSubject, excludeQuestionIds, clientStudentId } = req.body;

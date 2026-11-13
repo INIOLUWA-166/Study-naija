@@ -20,10 +20,16 @@ import {
   BarChart2, 
   GraduationCap, 
   Edit3,
-  Bookmark
+  Bookmark,
+  Download,
+  WifiOff,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 import { User, Subject } from '../types';
 import { INITIAL_SUBJECTS } from '../mockData';
+import { authStorage } from '../services/api';
+import { CachedStudyPathRecord, studyPathCacheManager } from '../utils/studyPathCache';
 import confetti from 'canvas-confetti';
 
 export interface ScheduledTopicTask {
@@ -214,6 +220,48 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
 
   // Filter state (all | pending | completed)
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
+  // Service Worker personalized study path offline cache state
+  const [cachedPathRecord, setCachedPathRecord] = useState<CachedStudyPathRecord | null>(null);
+  const [isCachingPath, setIsCachingPath] = useState<boolean>(false);
+
+  const loadCachedPathStatus = async () => {
+    const rec = await studyPathCacheManager.getCachedStudyPath(user);
+    setCachedPathRecord(rec);
+  };
+
+  useEffect(() => {
+    void loadCachedPathStatus();
+    const handleCacheUpdate = () => {
+      void loadCachedPathStatus();
+    };
+    window.addEventListener('studynaija_study_path_cache_updated', handleCacheUpdate);
+    return () => {
+      window.removeEventListener('studynaija_study_path_cache_updated', handleCacheUpdate);
+    };
+  }, [user]);
+
+  const handleDownloadOfflinePath = async () => {
+    setIsCachingPath(true);
+    try {
+      const scheduledSubjects = Array.from(
+        new Set<string>(tasks.map(t => t.subjectId).filter((id): id is string => Boolean(id)))
+      );
+      const rec = await studyPathCacheManager.downloadPersonalizedStudyPath(
+        user,
+        scheduledSubjects,
+        authStorage.getToken()
+      );
+      setCachedPathRecord(rec);
+    } finally {
+      setIsCachingPath(false);
+    }
+  };
+
+  const handleRemoveOfflinePath = async () => {
+    await studyPathCacheManager.removeCachedStudyPath(user);
+    setCachedPathRecord(null);
+  };
 
   // Persist tasks whenever changed
   useEffect(() => {
@@ -579,6 +627,88 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
               <div className="text-[11px] font-bold text-emerald-400 text-center animate-pulse flex items-center justify-center gap-1">
                 <span>🎉 All scheduled topics conquered today!</span>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Service Worker Offline Study Path Sync Bar */}
+        <div className="relative z-10 mt-6 pt-5 border-t border-cyan-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-2.5 text-xs">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+              cachedPathRecord
+                ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
+                : 'bg-cyan-500/15 border-cyan-400/40 text-cyan-300'
+            }`}>
+              {cachedPathRecord ? <Database className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+            </div>
+            <div>
+              <div className="font-bold text-white flex items-center gap-2 flex-wrap">
+                <span>Offline Study Path Cache (Service Worker)</span>
+                {cachedPathRecord && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                    {cachedPathRecord.studyPath.totalQuestions} Qs • {cachedPathRecord.sizeKb} KB Ready
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300">
+                {cachedPathRecord
+                  ? `Cached in browser Service Worker storage (${new Date(cachedPathRecord.cachedAt).toLocaleDateString()}). Works 100% without mobile data.`
+                  : 'Download your personalized study path & scheduled subject drills so you can practice anytime offline.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {cachedPathRecord ? (
+              <>
+                <button
+                  onClick={() => {
+                    const firstSubjectId = cachedPathRecord.studyPath.modules[0]?.subjectId || 'mathematics';
+                    onNavigate('practice', {
+                      subjectId: firstSubjectId,
+                      customQuestions: cachedPathRecord.studyPath.questions
+                    });
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>Practice Offline Path</span>
+                </button>
+                <button
+                  onClick={handleDownloadOfflinePath}
+                  disabled={isCachingPath}
+                  className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Refresh offline study path cache"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCachingPath ? 'animate-spin' : ''}`} />
+                  <span>Sync</span>
+                </button>
+                <button
+                  onClick={handleRemoveOfflinePath}
+                  className="p-2 rounded-xl bg-slate-900 hover:bg-red-950/60 text-slate-400 hover:text-red-400 border border-slate-700 transition-colors cursor-pointer"
+                  title="Clear offline study path cache"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleDownloadOfflinePath}
+                disabled={isCachingPath}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.35)] disabled:opacity-60"
+              >
+                {isCachingPath ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Caching Path...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Study Path Offline</span>
+                  </>
+                )}
+              </button>
             )}
           </div>
         </div>

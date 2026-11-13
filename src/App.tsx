@@ -19,6 +19,7 @@ import { DeviceTransferModal } from './components/DeviceTransferModal';
 import { WelcomeVoiceBanner } from './components/WelcomeVoiceBanner';
 import { WhatsAppSupport } from './components/WhatsAppSupport';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { OfflinePacksModal } from './components/OfflinePacksModal';
 import { HeadToHeadArenaView } from './components/HeadToHeadArenaView';
 import { MatchVerificationModal } from './components/MatchVerificationModal';
 import { CommunityView } from './components/CommunityView';
@@ -147,6 +148,7 @@ export default function App() {
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(() => studentNotificationManager.getUnreadCount(user?.id));
   const [isAdminSuspendedOpen, setIsAdminSuspendedOpen] = useState<boolean>(false);
   const [isHonorCodeOpen, setIsHonorCodeOpen] = useState<boolean>(false);
+  const [isOfflinePacksOpen, setIsOfflinePacksOpen] = useState<boolean>(false);
   const [customPracticeQuestions, setCustomPracticeQuestions] = useState<Question[] | null>(null);
 
   // Admin AI 2-minute suspension protocol (once)
@@ -422,6 +424,10 @@ export default function App() {
     }
     if (view === 'flash-challenge') {
       setIsFlashChallengeOpen(true);
+      return;
+    }
+    if (view === 'offline-packs') {
+      setIsOfflinePacksOpen(true);
       return;
     }
     if (view === 'verify-match' || view === 'verify') {
@@ -885,6 +891,7 @@ export default function App() {
                 onOpenAuth={handleOpenAuth}
                 onOpenFlashChallenge={() => setIsFlashChallengeOpen(true)}
                 onOpenCalculator={() => setIsGlobalCalculatorOpen(true)}
+                onOpenOfflinePacks={() => setIsOfflinePacksOpen(true)}
                 onSelectExamFilter={filter => {
                   setActiveExamFilter(filter);
                   handleNavigate('subjects');
@@ -1286,6 +1293,26 @@ export default function App() {
 
       {/* Offline Status & Local Cache Active Banner */}
       <OfflineIndicator />
+
+      {/* Offline Study Paths & Subject Packs Modal */}
+      <OfflinePacksModal
+        isOpen={isOfflinePacksOpen}
+        onClose={() => setIsOfflinePacksOpen(false)}
+        user={activeUser || user}
+        onStartOfflineDrill={(subjectId, customQuestions) => {
+          handleNavigate('practice', {
+            subjectId,
+            customQuestions: customQuestions && customQuestions.length > 0 ? customQuestions : undefined
+          });
+        }}
+        onStartOfflineStudyPath={(studyPath) => {
+          const firstSubjectId = studyPath.modules[0]?.subjectId || 'english';
+          handleNavigate('practice', {
+            subjectId: firstSubjectId,
+            customQuestions: studyPath.questions
+          });
+        }}
+      />
 
       {/* Student Profile & Honours Badges Modal */}
       <StudentProfileModal

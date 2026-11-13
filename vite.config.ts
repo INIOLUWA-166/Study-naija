@@ -11,7 +11,14 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+        includeAssets: [
+          'favicon-48x48.png',
+          'apple-touch-icon.png',
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-maskable-512x512.png',
+          'og-preview.jpg',
+        ],
         manifest: {
           id: '/',
           name: 'StudyNaija - JAMB & WAEC CBT',
@@ -49,8 +56,51 @@ export default defineConfig(() => {
           cleanupOutdatedCaches: true,
           navigateFallbackDenylist: [/^\/api\//],
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff,woff2}'],
           runtimeCaching: [
+            {
+              urlPattern: /\/api\/study-paths\/.*/i,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'studynaija-study-paths-v1',
+                expiration: {
+                  maxEntries: 40,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /\/api\/(questions|subjects)(\?.*)?$/i,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'studynaija-questions-api-v1',
+                expiration: {
+                  maxEntries: 80,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /\/api\/(dashboard|articles|jamb-countdown)(\/.*|\?.*)?$/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'studynaija-student-data-v1',
+                networkTimeoutSeconds: 3,
+                expiration: {
+                  maxEntries: 40,
+                  maxAgeSeconds: 60 * 60 * 24 * 14, // 14 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
@@ -82,7 +132,8 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: false,
+          enabled: true,
+          type: 'module',
         },
       }),
     ],

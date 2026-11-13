@@ -1,6 +1,7 @@
 import { OfflinePack, Question } from '../types';
 import { EXTENDED_QUESTIONS } from './questionBank';
 import { INITIAL_QUESTIONS } from '../mockData';
+import { QUESTIONS_API_CACHE_NAME } from './studyPathCache';
 
 const STORAGE_OFFLINE_PACKS_INDEX = 'studynaija_offline_packs_index';
 const STORAGE_OFFLINE_PACK_PREFIX = 'studynaija_offline_data_';
@@ -18,7 +19,7 @@ export const DEFAULT_OFFLINE_PACKS: OfflinePack[] = [
   },
   {
     id: 'pack-maths-100',
-    subjectId: 'maths',
+    subjectId: 'mathematics',
     subjectName: 'Mathematics',
     title: 'Algebra, Geometry & Calculus Pack',
     questionCount: 75,
@@ -78,6 +79,62 @@ export const DEFAULT_OFFLINE_PACKS: OfflinePack[] = [
   }
 ];
 
+async function cacheSubjectQuestionsInSW(subjectId: string, questionsList: Question[]) {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  try {
+    const url = `/api/questions?subjectId=${encodeURIComponent(subjectId)}&limit=100`;
+    // Also trigger live fetch so Workbox caches freshest backend payload if online
+    try {
+      const netRes = await fetch(url);
+      const ct = netRes.headers.get('content-type') || '';
+      if (netRes.ok && ct.includes('application/json')) {
+        const netJson = await netRes.json();
+        if (netJson && Array.isArray(netJson.questions) && netJson.questions.length > 0) {
+          const cache = await window.caches.open(QUESTIONS_API_CACHE_NAME);
+          await cache.put(
+            new Request(url, { method: 'GET' }),
+            new Response(JSON.stringify(netJson), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'X-StudyNaija-Offline-Cache': 'true',
+                'X-Cached-At': new Date().toISOString()
+              }
+            })
+          );
+          return;
+        }
+      }
+    } catch {}
+
+    const cache = await window.caches.open(QUESTIONS_API_CACHE_NAME);
+    await cache.put(
+      new Request(url, { method: 'GET' }),
+      new Response(JSON.stringify({ questions: questionsList, total: questionsList.length, cachedOffline: true }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'X-StudyNaija-Offline-Cache': 'true',
+          'X-Cached-At': new Date().toISOString()
+        }
+      })
+    );
+  } catch {}
+}
+
+async function deleteSubjectQuestionsFromSW(subjectId: string) {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  try {
+    const cache = await window.caches.open(QUESTIONS_API_CACHE_NAME);
+    const keys = await cache.keys();
+    await Promise.all(
+      keys
+        .filter(req => req.url.includes(`subjectId=${encodeURIComponent(subjectId)}`))
+        .map(req => cache.delete(req))
+    );
+  } catch {}
+}
+
 export const offlinePacksManager = {
   getPacks: (): OfflinePack[] => {
     if (typeof window === 'undefined') return DEFAULT_OFFLINE_PACKS;
@@ -85,10 +142,9 @@ export const offlinePacksManager = {
       const raw = localStorage.getItem(STORAGE_OFFLINE_PACKS_INDEX);
       if (!raw) return DEFAULT_OFFLINE_PACKS;
       const parsed: OfflinePack[] = JSON.parse(raw);
-      // Ensure all defaults are present
       return DEFAULT_OFFLINE_PACKS.map(def => {
         const found = parsed.find(p => p.id === def.id);
-        return found ? { ...def, ...found } : def;
+        return found ? { ...found, ...def, isDownloaded: found.isDownloaded, downloadedAt: found.downloadedAt } : def;
       });
     } catch {
       return DEFAULT_OFFLINE_PACKS;
@@ -101,24 +157,25 @@ export const offlinePacksManager = {
     const pack = packs.find(p => p.id === packId);
     if (!pack) return { success: false, pack: null };
 
-    // Filter relevant questions from available banks
+    const targetIds = pack.subjectId === 'mathematics' ? ['mathematics', 'maths'] : [pack.subjectId];
     const relevant = [
-      ...EXTENDED_QUESTIONS.filter(q => q.subjectId === pack.subjectId),
-      ...INITIAL_QUESTIONS.filter(q => q.subjectId === pack.subjectId)
+      ...EXTENDED_QUESTIONS.filter(q => targetIds.includes(q.subjectId)),
+      ...INITIAL_QUESTIONS.filter(q => targetIds.includes(q.subjectId))
     ];
 
-    // Deduplicate
     const unique = Array.from(new Map(relevant.map(q => [q.id, q])).values()).slice(0, pack.questionCount);
 
     try {
       localStorage.setItem(`${STORAGE_OFFLINE_PACK_PREFIX}${pack.subjectId}`, JSON.stringify(unique));
-      
+      void cacheSubjectQuestionsInSW(pack.subjectId, unique);
+
+      const downloadedAt = new Date().toISOString();
       const updatedPacks = packs.map(p => {
         if (p.id === packId) {
           return {
             ...p,
             isDownloaded: true,
-            downloadedAt: new Date().toISOString()
+            downloadedAt
           };
         }
         return p;
@@ -130,7 +187,7 @@ export const offlinePacksManager = {
         detail: { packId, isDownloaded: true }
       }));
 
-      return { success: true, pack: { ...pack, isDownloaded: true, downloadedAt: new Date().toISOString() } };
+      return { success: true, pack: { ...pack, isDownloaded: true, downloadedAt } };
     } catch (err) {
       console.error('Failed to store offline pack:', err);
       return { success: false, pack };
@@ -145,6 +202,7 @@ export const offlinePacksManager = {
 
     try {
       localStorage.removeItem(`${STORAGE_OFFLINE_PACK_PREFIX}${pack.subjectId}`);
+      void deleteSubjectQuestionsFromSW(pack.subjectId);
       const updatedPacks = packs.map(p => p.id === packId ? { ...p, isDownloaded: false, downloadedAt: undefined } : p);
       localStorage.setItem(STORAGE_OFFLINE_PACKS_INDEX, JSON.stringify(updatedPacks));
 
