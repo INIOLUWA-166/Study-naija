@@ -598,7 +598,7 @@ export function askLocalAITutor(
     groundingSources: [
       {
         title: 'JAMB & WAEC Official Nigerian Syllabus Reference',
-        url: 'https://studynaija10.netlify.app',
+        url: 'https://studynaija15.netlify.app',
         snippet: `${payload.subjectName || 'Academic'} mastery notes verified by Naija AI.`
       }
     ] as { title: string; url: string; snippet?: string }[],
@@ -1411,7 +1411,7 @@ export function getLocalHarvestPresetSources() {
   return {
     success: true,
     sources: [
-      { name: 'StudyNaija Verified JAMB Past Bank', url: 'https://studynaija10.netlify.app', examType: 'JAMB' },
+      { name: 'StudyNaija Verified JAMB Past Bank', url: 'https://studynaija15.netlify.app', examType: 'JAMB' },
       { name: 'WAEC & NECO Standard Syllabus Archive', url: 'https://waeconline.org.ng', examType: 'WAEC' }
     ]
   };
@@ -1451,7 +1451,7 @@ export function queryLocalNewsAgent(queryText: string, mode = 'news') {
     mode,
     searchQueries: [queryText],
     citations: [
-      { title: 'StudyNaija Academic Intelligence', url: 'https://studynaija10.netlify.app', snippet: 'Curated Nigerian exam & educational guidance.' }
+      { title: 'StudyNaija Academic Intelligence', url: 'https://studynaija15.netlify.app', snippet: 'Curated Nigerian exam & educational guidance.' }
     ],
     timestamp: new Date().toISOString()
   };
