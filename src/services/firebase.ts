@@ -259,13 +259,13 @@ export async function syncUserProfileToFirestore(user: AppUser): Promise<void> {
   try {
     const userDocRef = doc(db, 'users', user.id);
     await setDoc(userDocRef, {
-      id: user.id,
-      name: user.name,
-      email: user.email,
+      id: user.id.slice(0, 128),
+      name: (user.name || 'Nigerian Scholar').slice(0, 100),
+      email: (user.email || `${user.id}@studynaija.ng`).slice(0, 128),
       role: user.role,
       educationLevel: user.educationLevel,
       targetExam: user.targetExam,
-      targetCourse: user.targetCourse || '',
+      targetCourse: (user.targetCourse || '').slice(0, 150),
       premiumPlan: user.premiumPlan,
       xp: user.xp || 0,
       streakDays: user.streakDays || 1,
@@ -284,23 +284,23 @@ export async function saveExamResultToFirestore(result: ExamResult): Promise<voi
   const currentUid = auth.currentUser?.uid;
   if (!currentUid) return;
 
-  const resultId = result.id || `exam-${Date.now()}`;
+  const resultId = (result.id || `exam-${Date.now()}`).slice(0, 128);
   const path = `exam_results/${resultId}`;
 
   try {
     const resultDocRef = doc(db, 'exam_results', resultId);
     await setDoc(resultDocRef, {
       id: resultId,
-      userId: currentUid,
+      userId: currentUid.slice(0, 128),
       examType: result.examType,
-      title: result.title,
+      title: (result.title || 'CBT Practice Exam').slice(0, 150),
       durationMinutes: result.durationMinutes || 0,
       timeSpentSeconds: result.timeSpentSeconds || 0,
       totalQuestions: result.totalQuestions,
       correctCount: result.correctCount,
       scorePercentage: result.scorePercentage,
       jambScore: result.jambScore || 0,
-      date: result.date || new Date().toISOString(),
+      date: (result.date || new Date().toISOString()).slice(0, 50),
       createdAt: new Date().toISOString()
     });
   } catch (err) {

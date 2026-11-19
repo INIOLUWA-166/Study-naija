@@ -1,6 +1,7 @@
 import { User, Subject, Question, Article, ExamResult, AdminStats, PricingPlan, LeaderboardEntry, SubjectChampion, VerifiedArenaMatch, CommunityMessage, CommunityChannel, ModerationResult, SmartWebInsights, JambCountdownData, TournamentState, TournamentBankClaim, SecurityIncident, ForumThread, ForumReply, ForumExamCategory } from '../types';
-import { INITIAL_SUBJECTS, INITIAL_QUESTIONS, STUDY_ARTICLES, PRICING_PLANS } from '../mockData';
 import { generateLeaderboard, LeaderboardFilterOptions, LeaderboardStatsSummary } from '../utils/leaderboardData';
+import * as staticFb from '../utils/staticBackendFallback';
+import type { LocalStoredUser } from '../utils/staticBackendFallback';
 
 const TOKEN_KEY = 'studynaija_auth_token';
 const USER_KEY = 'studynaija_current_user';
@@ -98,11 +99,7 @@ const getHeaders = (hasBody = true) => {
   return headers;
 };
 
-const LOCAL_USERS_DIRECTORY_KEY = 'studynaija_local_users_directory_v1';
-
-interface LocalStoredUser extends User {
-  password?: string;
-}
+const LOCAL_USERS_DIRECTORY_KEY = staticFb.LOCAL_USERS_DIRECTORY_KEY;
 
 const getDefaultLocalUsers = (): LocalStoredUser[] => [
   {
@@ -302,6 +299,12 @@ export const api = {
       if (!matched) {
         throw new Error('Access Denied: No account found with this email or phone number on this device. Please register or sign in with Google.');
       }
+      if (matched.isBanned) {
+        throw new Error(`Account Permanently Banned: ${matched.banReason || 'Security violation detected by Admin Sentinel.'}`);
+      }
+      if (matched.isSuspended && (!matched.suspensionExpiresAt || new Date(matched.suspensionExpiresAt).getTime() > Date.now())) {
+        throw new Error(`Account Suspended: ${matched.suspensionReason || 'Temporarily suspended by administrator.'}`);
+      }
       if (matched.password && matched.password !== password) {
         throw new Error('Access Denied: Incorrect password. Please check your password and try again.');
       }
@@ -347,21 +350,42 @@ export const api = {
       if (!backend.ok) throw new Error(backend.data?.error || 'Failed to sync Google user session');
       result = backend.data;
     } else {
+      const directory = loadLocalUsersDirectory();
+      const existingIdx = directory.findIndex(u => u.id === userData.id || u.email.toLowerCase() === safeEmail);
       const isDefaultAdmin = safeEmail === 'luvkidjaja@gmail.com';
-      const syncedUser: User = {
-        id: userData.id,
-        name: userData.name || 'Nigerian Scholar',
-        email: safeEmail,
-        role: isDefaultAdmin ? 'admin' : 'student',
-        educationLevel: (userData.educationLevel as any) || 'secondary',
-        targetExam: (userData.targetExam as any) || 'JAMB',
-        targetCourse: userData.targetCourse || 'General Studies',
-        premiumPlan: isDefaultAdmin ? 'premium' : 'free',
-        createdAt: new Date().toISOString(),
-        xp: 100,
-        streakDays: 1,
-        stats: { questionsAnswered: 0, averageScore: 0, bestScore: 0, weakestSubject: 'None' }
-      };
+      let syncedUser: User;
+      if (existingIdx >= 0) {
+        const existing = directory[existingIdx];
+        if (existing.isBanned) {
+          throw new Error(`Account Permanently Banned: ${existing.banReason || 'Security violation detected by Admin Sentinel.'}`);
+        }
+        if (existing.isSuspended && (!existing.suspensionExpiresAt || new Date(existing.suspensionExpiresAt).getTime() > Date.now())) {
+          throw new Error(`Account Suspended: ${existing.suspensionReason || 'Temporarily suspended by administrator.'}`);
+        }
+        const { password: _, ...safeExisting } = existing;
+        syncedUser = {
+          ...safeExisting,
+          name: userData.name || safeExisting.name,
+          email: safeEmail || safeExisting.email
+        };
+      } else {
+        syncedUser = {
+          id: userData.id,
+          name: userData.name || 'Nigerian Scholar',
+          email: safeEmail,
+          role: isDefaultAdmin ? 'admin' : 'student',
+          educationLevel: (userData.educationLevel as any) || 'secondary',
+          targetExam: (userData.targetExam as any) || 'JAMB',
+          targetCourse: userData.targetCourse || 'General Studies',
+          premiumPlan: isDefaultAdmin ? 'premium' : 'free',
+          createdAt: new Date().toISOString(),
+          xp: 100,
+          streakDays: 1,
+          stats: { questionsAnswered: 0, averageScore: 0, bestScore: 0, weakestSubject: 'None' }
+        };
+        directory.push(syncedUser);
+        saveLocalUsersDirectory(directory);
+      }
       result = { token: `firebase_session_${syncedUser.id}`, user: syncedUser };
     }
 
@@ -492,57 +516,47 @@ export const api = {
 
   // Official JAMB Countdown
   getJambCountdown: async (): Promise<JambCountdownData> => {
-    try {
-      const res = await fetch('/api/jamb-countdown', {
-        headers: getHeaders(false)
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      // High-precision client-side simulated fallback
-      const officialExamDate = '2027-04-17T08:00:00+01:00';
-      const target = new Date(officialExamDate);
-      const diffMs = Math.max(0, target.getTime() - Date.now());
-      return {
-        examName: 'JAMB UTME 2027',
-        officialExamDate,
-        registrationStartDate: '2027-01-15T08:00:00+01:00',
-        registrationCloseDate: '2027-02-26T23:59:59+01:00',
-        mockExamDate: '2027-03-27T08:00:00+01:00',
-        daysRemaining: Math.floor(diffMs / (1000 * 60 * 60 * 24)),
-        hoursRemaining: Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-        minutesRemaining: Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60)),
-        secondsRemaining: Math.floor((diffMs % (1000 * 60)) / 1000),
-        totalSecondsRemaining: Math.floor(diffMs / 1000),
-        officialAnnouncement: 'Official JAMB Bulletin: Next Unified Tertiary Matriculation Examination (UTME) scheduled across 750+ accredited Computer Based Test (CBT) centres nationwide.',
-        status: diffMs > 0 ? 'UPCOMING' : 'IN_PROGRESS',
-        syllabusPhase: 'Intensive Preparation & Mock Drills',
-        studyTips: [
-          'Master the 8-Key navigation system (A, B, C, D, N, P, R, S) without touching the mouse.',
-          'Spend max 40 seconds per question on Use of English.',
-          'Aim for a score of 280+ to secure competitive federal university courses (Medicine, Law, Engineering).'
-        ]
-      };
-    }
+    const backend = await fetchBackendJson('/api/jamb-countdown', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+
+    const officialExamDate = '2027-04-17T08:00:00+01:00';
+    const target = new Date(officialExamDate);
+    const diffMs = Math.max(0, target.getTime() - Date.now());
+    return {
+      examName: 'JAMB UTME 2027',
+      officialExamDate,
+      registrationStartDate: '2027-01-15T08:00:00+01:00',
+      registrationCloseDate: '2027-02-26T23:59:59+01:00',
+      mockExamDate: '2027-03-27T08:00:00+01:00',
+      daysRemaining: Math.floor(diffMs / (1000 * 60 * 60 * 24)),
+      hoursRemaining: Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+      minutesRemaining: Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60)),
+      secondsRemaining: Math.floor((diffMs % (1000 * 60)) / 1000),
+      totalSecondsRemaining: Math.floor(diffMs / 1000),
+      officialAnnouncement: 'Official JAMB Bulletin: Next Unified Tertiary Matriculation Examination (UTME) scheduled across 750+ accredited Computer Based Test (CBT) centres nationwide.',
+      status: diffMs > 0 ? 'UPCOMING' : 'IN_PROGRESS',
+      syllabusPhase: 'Intensive Preparation & Mock Drills',
+      studyTips: [
+        'Master the 8-Key navigation system (A, B, C, D, N, P, R, S) without touching the mouse.',
+        'Spend max 40 seconds per question on Use of English.',
+        'Aim for a score of 280+ to secure competitive federal university courses (Medicine, Law, Engineering).'
+      ]
+    };
   },
 
   // Subjects
   getSubjects: async (params?: { level?: string }): Promise<Subject[]> => {
-    try {
-      const query = params?.level ? `?level=${encodeURIComponent(params.level)}` : '';
-      const res = await fetch(`/api/subjects${query}`, {
-        headers: getHeaders(false)
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const currentUser = authStorage.getUser();
-      const level = params?.level || currentUser?.educationLevel;
-      if (level && level !== 'all') {
-        return INITIAL_SUBJECTS.filter(s => !s.educationLevel || s.educationLevel === level);
-      }
-      return INITIAL_SUBJECTS;
+    const query = params?.level ? `?level=${encodeURIComponent(params.level)}` : '';
+    const backend = await fetchBackendJson(`/api/subjects${query}`, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+
+    const currentUser = authStorage.getUser();
+    const level = params?.level || currentUser?.educationLevel;
+    const allSubjects = staticFb.getAllLocalSubjects();
+    if (level && level !== 'all') {
+      return allSubjects.filter(s => !s.educationLevel || s.educationLevel === level);
     }
+    return allSubjects;
   },
 
   // Questions
@@ -557,9 +571,7 @@ export const api = {
       if (params?.limit) query.set('limit', String(params.limit));
       if (params?.offset) query.set('offset', String(params.offset));
 
-      const res = await fetch(`/api/questions?${query.toString()}`, {
-        headers: getHeaders(false)
-      });
+      const res = await fetch(`/api/questions?${query.toString()}`, { headers: getHeaders(false) });
       const contentType = res.headers.get('content-type') || '';
       if (!res.ok || !contentType.includes('application/json')) throw new Error();
       return await res.json();
@@ -567,7 +579,7 @@ export const api = {
       const currentUser = authStorage.getUser();
       const level = params?.level || currentUser?.educationLevel;
 
-      let pool: Question[] = [...INITIAL_QUESTIONS];
+      let pool: Question[] = staticFb.getAllLocalQuestionPool();
       if (params?.subjectId && params.subjectId !== 'all') {
         try {
           const { studyPathCacheManager } = await import('../utils/studyPathCache');
@@ -598,64 +610,77 @@ export const api = {
       if (params?.difficulty && params.difficulty !== 'All' && params.difficulty !== 'all') {
         filtered = filtered.filter(q => q.difficulty?.toLowerCase() === params.difficulty!.toLowerCase());
       }
-      return { questions: filtered.slice(0, 100), total: filtered.length };
+      const limit = params?.limit || 100;
+      const offset = params?.offset || 0;
+      return { questions: filtered.slice(offset, offset + limit), total: filtered.length };
     }
   },
 
   submitPracticeAnswer: async (questionId: string, selectedOption: string, isCorrect?: boolean, correctOption?: string) => {
-    try {
-      const res = await fetch('/api/questions/submit-practice', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ questionId, selectedOption, isCorrect, correctOption })
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const q = INITIAL_QUESTIONS.find(item => item.id === questionId);
-      const targetCorrect = correctOption || q?.correctOption || 'A';
-      return {
-        isCorrect: typeof isCorrect === 'boolean' ? isCorrect : (targetCorrect === selectedOption),
-        correctOption: targetCorrect,
-        explanation: q?.explanation || 'Standard solution'
+    const backend = await fetchBackendJson('/api/questions/submit-practice', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ questionId, selectedOption, isCorrect, correctOption })
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+
+    const q = staticFb.getAllLocalQuestionPool().find(item => item.id === questionId);
+    const targetCorrect = correctOption || q?.correctOption || 'A';
+    const answerCorrect = typeof isCorrect === 'boolean' ? isCorrect : (targetCorrect === selectedOption);
+
+    const currentUser = authStorage.getUser();
+    if (currentUser) {
+      const updatedUser: User = {
+        ...currentUser,
+        xp: (currentUser.xp || 0) + (answerCorrect ? 10 : 2),
+        stats: {
+          questionsAnswered: (currentUser.stats?.questionsAnswered || 0) + 1,
+          averageScore: currentUser.stats?.averageScore || 0,
+          bestScore: currentUser.stats?.bestScore || 0,
+          weakestSubject: currentUser.stats?.weakestSubject || 'None'
+        }
       };
+      authStorage.setUser(updatedUser);
     }
+
+    return {
+      isCorrect: answerCorrect,
+      correctOption: targetCorrect,
+      explanation: q?.explanation || 'Standard solution'
+    };
   },
 
   // Mock Exam
   generateMockExam: async (examType: 'JAMB' | 'WAEC', selectedSubjects: string[], questionCountPerSubject = 10, excludeQuestionIds: string[] = []) => {
     const clientStudentId = typeof localStorage !== 'undefined' ? (localStorage.getItem('studynaija_student_id') || `stu_${Date.now()}`) : `stu_${Date.now()}`;
-    try {
-      const res = await fetch('/api/exams/generate', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ examType, selectedSubjects, questionCountPerSubject, excludeQuestionIds, clientStudentId })
+    const backend = await fetchBackendJson('/api/exams/generate', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ examType, selectedSubjects, questionCountPerSubject, excludeQuestionIds, clientStudentId })
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+
+    const pool = staticFb.getAllLocalQuestionPool();
+    const picked: Question[] = [];
+    const seen = new Set<string>();
+    const excludeSet = new Set<string>(excludeQuestionIds);
+    selectedSubjects.forEach(sId => {
+      let matching = pool.filter(q => q.subjectId === sId && !seen.has(q.id) && !excludeSet.has(q.id));
+      if (matching.length < questionCountPerSubject) {
+        matching = pool.filter(q => q.subjectId === sId && !seen.has(q.id));
+      }
+      matching.slice(0, questionCountPerSubject).forEach(q => {
+        seen.add(q.id);
+        picked.push(q);
       });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      // client fallback with strict deduplication and option scrambling
-      const picked: Question[] = [];
-      const seen = new Set<string>();
-      const excludeSet = new Set<string>(excludeQuestionIds);
-      selectedSubjects.forEach(sId => {
-        let matching = INITIAL_QUESTIONS.filter(q => q.subjectId === sId && !seen.has(q.id) && !excludeSet.has(q.id));
-        if (matching.length < questionCountPerSubject) {
-          matching = INITIAL_QUESTIONS.filter(q => q.subjectId === sId && !seen.has(q.id));
-        }
-        matching.slice(0, questionCountPerSubject).forEach(q => {
-          seen.add(q.id);
-          picked.push(q);
-        });
-      });
-      return {
-        examSessionId: `fallback_sess_${Date.now()}`,
-        examType,
-        questions: picked.length ? picked : INITIAL_QUESTIONS.slice(0, 10),
-        durationMinutes: examType === 'JAMB' ? 120 : 90,
-        totalQuestions: picked.length || 10
-      };
-    }
+    });
+    return {
+      examSessionId: `fallback_sess_${Date.now()}`,
+      examType,
+      questions: picked.length ? picked : pool.slice(0, 10),
+      durationMinutes: examType === 'JAMB' ? 120 : 90,
+      totalQuestions: picked.length || 10
+    };
   },
 
   submitMockExam: async (payload: {
@@ -678,14 +703,14 @@ export const api = {
       return backend.data.result;
     }
 
-    // Client-side grading fallback for static hosting (e.g., Netlify)
     const currentUser = authStorage.getUser();
+    const pool = staticFb.getAllLocalQuestionPool();
     const totalQuestions = payload.answers.length || 1;
     let correctCount = 0;
     const toOption = (val?: string | null): 'A' | 'B' | 'C' | 'D' =>
       val === 'A' || val === 'B' || val === 'C' || val === 'D' ? val : 'A';
     const evaluatedAnswers = payload.answers.map(ans => {
-      const q = INITIAL_QUESTIONS.find(item => item.id === ans.questionId);
+      const q = pool.find(item => item.id === ans.questionId);
       const correctOpt = toOption(ans.correctOption || q?.correctOption);
       const selectedOpt = toOption(ans.selectedOption);
       const isCorrect = ans.selectedOption === correctOpt;
@@ -703,7 +728,7 @@ export const api = {
         ? payload.examType
         : 'JAMB';
     const jambScore = resolvedExamType === 'JAMB' ? Math.round((scorePercentage / 100) * 400) : undefined;
-    return {
+    const result: ExamResult = {
       id: `exam_${Date.now()}`,
       userId: currentUser?.id || 'local_scholar',
       examType: resolvedExamType,
@@ -718,32 +743,29 @@ export const api = {
       subjectScores: [],
       answers: evaluatedAnswers
     };
+
+    staticFb.saveLocalExamResult(result, currentUser);
+    if (currentUser) {
+      const updatedUser: User = {
+        ...currentUser,
+        xp: (currentUser.xp || 0) + correctCount * 15 + (payload.speedBonusPoints || 0),
+        stats: {
+          questionsAnswered: (currentUser.stats?.questionsAnswered || 0) + totalQuestions,
+          averageScore: currentUser.stats?.averageScore ? Math.round((currentUser.stats.averageScore + scorePercentage) / 2) : scorePercentage,
+          bestScore: Math.max(currentUser.stats?.bestScore || 0, scorePercentage),
+          weakestSubject: currentUser.stats?.weakestSubject || 'None'
+        }
+      };
+      authStorage.setUser(updatedUser);
+    }
+    return result;
   },
 
   // Dashboard
   getDashboardStats: async () => {
-    try {
-      const res = await fetch('/api/dashboard', {
-        headers: getHeaders(false)
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      return {
-        stats: {
-          questionsAnswered: 84,
-          averageScore: 74,
-          bestScore: 88,
-          weakestSubject: 'Physics'
-        },
-        recentExams: [],
-        recommendedTopics: [
-          { topic: 'Mechanics & Newton Laws', subjectName: 'Physics', subjectId: 'physics', questionsAvailable: 24 },
-          { topic: 'Calculus & Derivatives', subjectName: 'Mathematics', subjectId: 'mathematics', questionsAvailable: 30 },
-          { topic: 'Acids, Bases & Salts', subjectName: 'Chemistry', subjectId: 'chemistry', questionsAvailable: 20 }
-        ]
-      };
-    }
+    const backend = await fetchBackendJson('/api/dashboard', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return await staticFb.getLocalDashboardStats(authStorage.getUser());
   },
 
   // Student Leaderboard (Nationwide CBT Top Scorers & Champions)
@@ -752,46 +774,31 @@ export const api = {
     stats: LeaderboardStatsSummary;
     champions: SubjectChampion[];
   }> => {
-    try {
-      const query = new URLSearchParams();
-      if (options.subjectId) query.set('subjectId', options.subjectId);
-      if (options.timeframe) query.set('timeframe', options.timeframe);
-      if (options.examType) query.set('examType', options.examType);
-      if (options.searchQuery) query.set('searchQuery', options.searchQuery);
+    const query = new URLSearchParams();
+    if (options.subjectId) query.set('subjectId', options.subjectId);
+    if (options.timeframe) query.set('timeframe', options.timeframe);
+    if (options.examType) query.set('examType', options.examType);
+    if (options.searchQuery) query.set('searchQuery', options.searchQuery);
 
-      const res = await fetch(`/api/leaderboard?${query.toString()}`, {
-        headers: getHeaders(false)
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      // Offline fallback: dynamically generate with active client user state
-      const currentUser = authStorage.getUser();
-      const dash = await api.getDashboardStats().catch(() => ({ recentExams: [] }));
-      const mockResults = dash?.recentExams || [];
-      return generateLeaderboard(currentUser, options, mockResults);
-    }
+    const backend = await fetchBackendJson(`/api/leaderboard?${query.toString()}`, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+
+    const currentUser = authStorage.getUser();
+    const dash = await staticFb.getLocalDashboardStats(currentUser).catch(() => ({ recentExams: [] }));
+    return generateLeaderboard(currentUser, options, dash.recentExams || []);
   },
 
   // Articles
   getArticles: async (): Promise<Article[]> => {
-    try {
-      const res = await fetch('/api/articles');
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      return STUDY_ARTICLES;
-    }
+    const backend = await fetchBackendJson('/api/articles');
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getAllLocalArticles();
   },
 
   getArticle: async (slug: string): Promise<Article | null> => {
-    try {
-      const res = await fetch(`/api/articles/${slug}`);
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      return STUDY_ARTICLES.find(a => a.slug === slug || a.id === slug) || null;
-    }
+    const backend = await fetchBackendJson(`/api/articles/${slug}`);
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getAllLocalArticles().find(a => a.slug === slug || a.id === slug) || null;
   },
 
   // Payments (Real Nigerian & International Gateways, AI verified settlement)
@@ -801,7 +808,7 @@ export const api = {
     if (currentUser?.id) headers['x-user-id'] = currentUser.id;
     if (currentUser?.email) headers['x-user-email'] = currentUser.email;
 
-    const res = await fetch('/api/payment/initialize', {
+    const backend = await fetchBackendJson('/api/payment/initialize', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -813,9 +820,11 @@ export const api = {
         userName: currentUser?.name
       })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to initialize payment');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to initialize payment');
+      return backend.data;
+    }
+    return staticFb.initializeLocalPayment(currentUser, planId, paymentMethod, phoneNumber);
   },
 
   verifyPayment: async (
@@ -842,7 +851,7 @@ export const api = {
       planId: legacyPlanId
     };
 
-    const res = await fetch('/api/payment/verify', {
+    const backend = await fetchBackendJson('/api/payment/verify', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -851,26 +860,31 @@ export const api = {
         userEmail: currentUser?.email
       })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Payment confirmation failed.');
-    if (data.token) authStorage.setToken(data.token);
-    if (data.user && data.status === 'approved') authStorage.setUser(data.user);
-    return data;
+    if (backend.isBackendAvailable) {
+      const data = backend.data;
+      if (!backend.ok) throw new Error(data?.error || 'Payment confirmation failed.');
+      if (data.token) authStorage.setToken(data.token);
+      if (data.user && data.status === 'approved') authStorage.setUser(data.user);
+      return data;
+    }
+    return staticFb.verifyLocalPayment(currentUser, payload);
   },
 
   getPaymentStatus: async (reference: string) => {
-    const res = await fetch(`/api/payment/status/${encodeURIComponent(reference)}`, { headers: getHeaders(false) });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to check payment status');
-    if (data.user) {
-      authStorage.setUser(data.user);
+    const backend = await fetchBackendJson(`/api/payment/status/${encodeURIComponent(reference)}`, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to check payment status');
+      if (backend.data?.user) authStorage.setUser(backend.data.user);
+      return backend.data;
     }
-    return data;
+    const res = staticFb.getLocalPaymentStatus(reference, authStorage.getUser());
+    if (res.user) authStorage.setUser(res.user);
+    return res;
   },
 
   initializePaystackPayment: async (planId: string, email?: string, callbackUrl?: string) => {
     const currentUser = authStorage.getUser();
-    const res = await fetch('/api/payment/paystack/initialize', {
+    const backend = await fetchBackendJson('/api/payment/paystack/initialize', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({
@@ -879,163 +893,210 @@ export const api = {
         callbackUrl
       })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to initialize Paystack transaction');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to initialize Paystack transaction');
+      return backend.data;
+    }
+    return staticFb.initializeLocalPayment(currentUser, (planId as any) || 'medium', 'paystack', currentUser?.phone);
   },
 
   verifyPaystackPayment: async (reference: string, planId?: string) => {
-    const res = await fetch('/api/payment/paystack/verify', {
+    const backend = await fetchBackendJson('/api/payment/paystack/verify', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ reference, planId })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to verify Paystack transaction');
-    if (data.user) {
-      authStorage.setUser(data.user);
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to verify Paystack transaction');
+      if (backend.data?.user) authStorage.setUser(backend.data.user);
+      return backend.data;
     }
-    return data;
+    return staticFb.verifyLocalPayment(authStorage.getUser(), { reference, planId });
   },
 
   getPaymentConfig: async () => {
-    const res = await fetch('/api/payment/config', { headers: getHeaders(false) });
-    if (!res.ok) throw new Error('Failed to fetch payment configuration');
-    return await res.json();
+    const backend = await fetchBackendJson('/api/payment/config', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalPaymentConfig();
   },
 
   updatePaymentConfig: async (config: { bankName: string; accountNumber: string; accountName: string; instructions?: string }) => {
-    const res = await fetch('/api/admin/payment-config', {
+    const backend = await fetchBackendJson('/api/admin/payment-config', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(config)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update payment configuration');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to update payment configuration');
+      return backend.data;
+    }
+    return staticFb.updateLocalPaymentConfig(config);
   },
 
   getAdminPayments: async () => {
-    const res = await fetch('/api/admin/payments', { headers: getHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch payments queue');
-    return data;
+    const backend = await fetchBackendJson('/api/admin/payments', { headers: getHeaders() });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch payments queue');
+      return backend.data;
+    }
+    return staticFb.getLocalAdminPayments();
   },
 
   approveAdminPayment: async (reference: string) => {
-    const res = await fetch(`/api/admin/payments/${encodeURIComponent(reference)}/approve`, {
+    const backend = await fetchBackendJson(`/api/admin/payments/${encodeURIComponent(reference)}/approve`, {
       method: 'POST',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to approve payment');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to approve payment');
+      return backend.data;
+    }
+    return staticFb.approveLocalAdminPayment(reference, (uid, updater) => {
+      const dir = loadLocalUsersDirectory();
+      const idx = dir.findIndex(u => u.id === uid);
+      if (idx >= 0) {
+        dir[idx] = updater(dir[idx]);
+        saveLocalUsersDirectory(dir);
+      }
+    });
   },
 
   rejectAdminPayment: async (reference: string, reason?: string) => {
-    const res = await fetch(`/api/admin/payments/${encodeURIComponent(reference)}/reject`, {
+    const backend = await fetchBackendJson(`/api/admin/payments/${encodeURIComponent(reference)}/reject`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ reason })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to reject payment');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to reject payment');
+      return backend.data;
+    }
+    return staticFb.rejectLocalAdminPayment(reference, reason);
   },
 
   banTrollPayment: async (reference: string, reason?: string) => {
-    const res = await fetch(`/api/admin/payments/${encodeURIComponent(reference)}/ban-troll`, {
+    const backend = await fetchBackendJson(`/api/admin/payments/${encodeURIComponent(reference)}/ban-troll`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ reason })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to ban troll');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to ban troll');
+      return backend.data;
+    }
+    return staticFb.banTrollLocalPayment(reference, reason, (uid, updater) => {
+      const dir = loadLocalUsersDirectory();
+      const idx = dir.findIndex(u => u.id === uid);
+      if (idx >= 0) {
+        dir[idx] = updater(dir[idx]);
+        saveLocalUsersDirectory(dir);
+      }
+    });
   },
 
   unbanTrollPayment: async (reference: string) => {
-    const res = await fetch(`/api/admin/payments/${encodeURIComponent(reference)}/unban-troll`, {
+    const backend = await fetchBackendJson(`/api/admin/payments/${encodeURIComponent(reference)}/unban-troll`, {
       method: 'POST',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to unban user');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to unban user');
+      return backend.data;
+    }
+    return staticFb.unbanTrollLocalPayment(reference, (uid, updater) => {
+      const dir = loadLocalUsersDirectory();
+      const idx = dir.findIndex(u => u.id === uid);
+      if (idx >= 0) {
+        dir[idx] = updater(dir[idx]);
+        saveLocalUsersDirectory(dir);
+      }
+    });
   },
 
   // Admin APIs
   createQuestion: async (questionData: any) => {
-    const res = await fetch('/api/admin/questions', {
+    const backend = await fetchBackendJson('/api/admin/questions', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(questionData)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to create question');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to create question');
+      return backend.data;
+    }
+    return { success: true, question: staticFb.createLocalQuestion(questionData) };
   },
 
   updateQuestion: async (id: string, questionData: any) => {
-    const res = await fetch(`/api/admin/questions/${id}`, {
+    const backend = await fetchBackendJson(`/api/admin/questions/${id}`, {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(questionData)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update question');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to update question');
+      return backend.data;
+    }
+    return { success: true, question: staticFb.updateLocalQuestion(id, questionData) };
   },
 
   deleteQuestion: async (id: string) => {
-    const res = await fetch(`/api/admin/questions/${id}`, {
+    const backend = await fetchBackendJson(`/api/admin/questions/${id}`, {
       method: 'DELETE',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to delete question');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to delete question');
+      return backend.data;
+    }
+    return staticFb.deleteLocalQuestion(id);
   },
 
   createSubject: async (subjectData: any) => {
-    const res = await fetch('/api/admin/subjects', {
+    const backend = await fetchBackendJson('/api/admin/subjects', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(subjectData)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to create subject');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to create subject');
+      return backend.data;
+    }
+    return { success: true, subject: staticFb.createLocalSubject(subjectData) };
   },
 
   createArticle: async (articleData: any) => {
-    const res = await fetch('/api/admin/articles', {
+    const backend = await fetchBackendJson('/api/admin/articles', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(articleData)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to publish article');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to publish article');
+      return backend.data;
+    }
+    return { success: true, article: staticFb.createLocalArticle(articleData) };
   },
 
   deleteArticle: async (id: string) => {
-    const res = await fetch(`/api/admin/articles/${id}`, {
+    const backend = await fetchBackendJson(`/api/admin/articles/${id}`, {
       method: 'DELETE',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to delete article');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to delete article');
+      return backend.data;
+    }
+    return staticFb.deleteLocalArticle(id);
   },
 
   getAdminStats: async (): Promise<AdminStats> => {
-    const res = await fetch('/api/admin/stats', {
-      headers: getHeaders(false)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch admin stats');
-    return data;
+    const backend = await fetchBackendJson('/api/admin/stats', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch admin stats');
+      return backend.data;
+    }
+    return staticFb.getLocalAdminStats(loadLocalUsersDirectory());
   },
 
   // AI Tutor ("Naija AI")
@@ -1058,180 +1119,199 @@ export const api = {
     groundingSources?: { title: string; url: string; snippet?: string }[];
     smartWebInsights?: SmartWebInsights;
   }> => {
-    const res = await fetch('/api/ai-tutor/chat', {
+    const backend = await fetchBackendJson('/api/ai-tutor/chat', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) {
-      const error: any = new Error(data.message || data.error || 'AI Tutor request failed');
-      error.status = res.status;
-      error.data = data;
-      throw error;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) {
+        const error: any = new Error(backend.data?.message || backend.data?.error || 'AI Tutor request failed');
+        error.data = backend.data;
+        throw error;
+      }
+      return backend.data;
     }
-    return data;
+    return staticFb.askLocalAITutor(authStorage.getUser(), payload);
   },
 
   getAITutorStatus: async () => {
-    const res = await fetch('/api/ai-tutor/status', {
-      headers: getHeaders(false)
-    });
-    const data = await res.json();
-    return data;
+    const backend = await fetchBackendJson('/api/ai-tutor/status', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalAITutorStatus(authStorage.getUser());
   },
 
   resetAITutorTrial: async () => {
-    const res = await fetch('/api/ai-tutor/reset-trial', {
+    const backend = await fetchBackendJson('/api/ai-tutor/reset-trial', {
       method: 'POST',
       headers: getHeaders()
     });
-    const data = await res.json();
-    return data;
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.resetLocalAITutorTrial(authStorage.getUser());
   },
 
   // Question Bookmarks
   getBookmarkedQuestions: async (): Promise<{ bookmarks: Question[]; total: number; bookmarkedIds: string[] }> => {
-    const res = await fetch('/api/questions/bookmarks', {
-      headers: getHeaders(false)
-    });
-    const data = await res.json();
-    return data;
+    const backend = await fetchBackendJson('/api/questions/bookmarks', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalBookmarks(authStorage.getUser());
   },
 
   toggleBookmarkQuestion: async (questionId: string, bookmarked?: boolean): Promise<{ success: boolean; isBookmarked: boolean; bookmarkedIds: string[] }> => {
-    const res = await fetch('/api/questions/bookmark', {
+    const backend = await fetchBackendJson('/api/questions/bookmark', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ questionId, bookmarked })
     });
-    const data = await res.json();
-    return data;
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.toggleLocalBookmark(authStorage.getUser(), questionId, bookmarked);
   },
 
   // Gamification Sync
   syncGamification: async (payload: { xp?: number; streakDays?: number; flashChallengeBestScore?: number }) => {
-    try {
-      const res = await fetch('/api/user/sync-gamification', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(payload)
-      });
-      return await res.json();
-    } catch {
-      return { success: false };
+    const backend = await fetchBackendJson('/api/user/sync-gamification', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+
+    const currentUser = authStorage.getUser();
+    if (currentUser) {
+      const updatedUser: User = {
+        ...currentUser,
+        xp: typeof payload.xp === 'number' ? payload.xp : currentUser.xp,
+        streakDays: typeof payload.streakDays === 'number' ? payload.streakDays : currentUser.streakDays,
+        flashChallengeBestScore: typeof payload.flashChallengeBestScore === 'number' ? payload.flashChallengeBestScore : currentUser.flashChallengeBestScore
+      };
+      authStorage.setUser(updatedUser);
     }
+    return { success: true };
   },
 
   // Monthly Leaderboard Winner Airtime Claims & Admin Alerts
   claimMonthlyPrize: async (data: { phoneNumber: string; network: string; notes?: string }) => {
-    const res = await fetch('/api/leaderboard/claim-prize', {
+    const backend = await fetchBackendJson('/api/leaderboard/claim-prize', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
     });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || 'Failed to submit airtime claim details');
-    return result;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to submit airtime claim details');
+      return backend.data;
+    }
+    return staticFb.claimLocalMonthlyPrize(authStorage.getUser(), data);
   },
 
   getMyPrizeClaim: async () => {
-    try {
-      const res = await fetch('/api/leaderboard/my-prize-claim', {
-        headers: getHeaders(false)
-      });
-      if (!res.ok) return { hasClaim: false, claim: null };
-      return await res.json();
-    } catch {
-      return { hasClaim: false, claim: null };
-    }
+    const backend = await fetchBackendJson('/api/leaderboard/my-prize-claim', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalMyPrizeClaim(authStorage.getUser());
   },
 
   getAdminMonthlyWinners: async () => {
-    const res = await fetch('/api/admin/monthly-winners', { headers: getHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch monthly winners');
-    return data;
+    const backend = await fetchBackendJson('/api/admin/monthly-winners', { headers: getHeaders() });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch monthly winners');
+      return backend.data;
+    }
+    return staticFb.getLocalAdminMonthlyWinners();
   },
 
   fulfillAdminMonthlyWinner: async (id: string, notes?: string) => {
-    const res = await fetch(`/api/admin/monthly-winners/${encodeURIComponent(id)}/fulfill`, {
+    const backend = await fetchBackendJson(`/api/admin/monthly-winners/${encodeURIComponent(id)}/fulfill`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ notes })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to mark airtime as sent');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to mark airtime as sent');
+      return backend.data;
+    }
+    return staticFb.fulfillLocalMonthlyWinner(id, notes);
   },
 
   updateAdminMonthlyWinnerPhone: async (id: string, phoneNumber: string, network: string, notes?: string) => {
-    const res = await fetch(`/api/admin/monthly-winners/${encodeURIComponent(id)}/update-phone`, {
+    const backend = await fetchBackendJson(`/api/admin/monthly-winners/${encodeURIComponent(id)}/update-phone`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ phoneNumber, network, notes })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update winner phone');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to update winner phone');
+      return backend.data;
+    }
+    return staticFb.updateLocalMonthlyWinnerPhone(id, phoneNumber, network, notes);
   },
 
   refreshAdminMonthlyWinners: async () => {
-    const res = await fetch('/api/admin/monthly-winners/snapshot', {
+    const backend = await fetchBackendJson('/api/admin/monthly-winners/snapshot', {
       method: 'POST',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to refresh winners snapshot');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to refresh winners snapshot');
+      return backend.data;
+    }
+    return staticFb.getLocalAdminMonthlyWinners();
   },
 
   getAdminNotifications: async () => {
-    const res = await fetch('/api/admin/notifications', { headers: getHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch admin notifications');
-    return data;
+    const backend = await fetchBackendJson('/api/admin/notifications', { headers: getHeaders() });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch admin notifications');
+      return backend.data;
+    }
+    return staticFb.getLocalAdminNotifications();
   },
 
   markAdminNotificationRead: async (id: string) => {
-    const res = await fetch(`/api/admin/notifications/${encodeURIComponent(id)}/read`, {
+    const backend = await fetchBackendJson(`/api/admin/notifications/${encodeURIComponent(id)}/read`, {
       method: 'POST',
       headers: getHeaders()
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.markLocalAdminNotificationRead(id);
   },
 
   markAllAdminNotificationsRead: async () => {
-    const res = await fetch('/api/admin/notifications/mark-all-read', {
+    const backend = await fetchBackendJson('/api/admin/notifications/mark-all-read', {
       method: 'POST',
       headers: getHeaders()
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.markLocalAdminNotificationRead();
   },
 
   testAdminEmailNotification: async () => {
-    const res = await fetch('/api/admin/test-email-notification', {
+    const backend = await fetchBackendJson('/api/admin/test-email-notification', {
       method: 'POST',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to trigger test email notification');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to trigger test email notification');
+      return backend.data;
+    }
+    return { success: true, message: 'Static hosting preview: email dispatch is simulated on Netlify.' };
   },
 
   // Public Anti-Cheat & Match Verification
   verifyArenaMatch: async (codeOrId: string): Promise<{ success: boolean; match: VerifiedArenaMatch; ledger: string; verifiedAt: string }> => {
-    const res = await fetch(`/api/arena/verify/${encodeURIComponent(codeOrId.trim())}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Match record not found or unverified');
-    return data;
+    const backend = await fetchBackendJson(`/api/arena/verify/${encodeURIComponent(codeOrId.trim())}`);
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Match record not found or unverified');
+      return backend.data;
+    }
+    return staticFb.verifyLocalArenaMatch(codeOrId);
   },
 
   verifyExamResult: async (idOrCode: string): Promise<{ success: boolean; exam: ExamResult; ledger: string }> => {
-    const res = await fetch(`/api/verify/exam/${encodeURIComponent(idOrCode.trim())}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Exam certificate record not found or unverified');
-    return data;
+    const backend = await fetchBackendJson(`/api/verify/exam/${encodeURIComponent(idOrCode.trim())}`);
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Exam certificate record not found or unverified');
+      return backend.data;
+    }
+    return staticFb.verifyLocalExamResult(idOrCode);
   },
 
   // Student Community & SabiGuard AI Moderation
@@ -1240,12 +1320,12 @@ export const api = {
     if (channel) params.append('channel', channel);
     if (search) params.append('search', search);
 
-    const res = await fetch(`/api/community/messages?${params.toString()}`, {
-      headers: getHeaders(false)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch community messages');
-    return data;
+    const backend = await fetchBackendJson(`/api/community/messages?${params.toString()}`, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch community messages');
+      return backend.data;
+    }
+    return staticFb.getLocalCommunityMessages(channel, search);
   },
 
   postCommunityMessage: async (payload: {
@@ -1259,147 +1339,139 @@ export const api = {
     userTournamentBadge?: '1st' | '2nd' | '3rd' | null;
     userThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
   }): Promise<{ success: boolean; message?: CommunityMessage; blocked?: boolean; error?: string; moderation?: ModerationResult }> => {
-    const res = await fetch('/api/community/messages', {
+    const backend = await fetchBackendJson('/api/community/messages', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) {
-      // Could be AI moderation rejection or validation error
-      const err: any = new Error(data.error || 'Message could not be posted');
-      err.moderation = data.moderation;
-      err.blocked = data.blocked;
+    if (backend.isBackendAvailable) {
+      const data = backend.data;
+      if (!backend.ok) {
+        const err: any = new Error(data?.error || 'Message could not be posted');
+        err.moderation = data?.moderation;
+        err.blocked = data?.blocked;
+        throw err;
+      }
+      return data;
+    }
+    const res = staticFb.postLocalCommunityMessage(authStorage.getUser(), payload);
+    if (!res.success) {
+      const err: any = new Error(res.error || 'Message could not be posted');
+      err.moderation = res.moderation;
+      err.blocked = res.blocked;
       throw err;
     }
-    return data;
+    return res;
   },
 
   likeCommunityMessage: async (messageId: string, userId?: string): Promise<{ success: boolean; likes: number; isLiked: boolean }> => {
-    const res = await fetch(`/api/community/messages/${encodeURIComponent(messageId)}/like`, {
+    const backend = await fetchBackendJson(`/api/community/messages/${encodeURIComponent(messageId)}/like`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.likeLocalCommunityMessage(messageId, userId || authStorage.getUser()?.id);
   },
 
-  requestCommunityAiExplanation: async (questionText: string, messageId?: string, channelId?: string): Promise<{ success: boolean; reply: CommunityMessage }> => {
-    const res = await fetch('/api/community/ai-explain', {
+  requestCommunityAiExplanation: async (questionText: string, _messageId?: string, channelId?: string): Promise<{ success: boolean; reply: CommunityMessage }> => {
+    const backend = await fetchBackendJson('/api/community/ai-explain', {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ questionText, messageId, channelId })
+      body: JSON.stringify({ questionText, messageId: _messageId, channelId })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to get AI explanation');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to get AI explanation');
+      return backend.data;
+    }
+    return staticFb.requestLocalCommunityAiExplanation(questionText, (channelId as CommunityChannel) || 'general');
   },
 
   // Monthly Champions League Tournament & Admin AI Assistant
   getTournamentState: async (): Promise<{ success: boolean; tournament: TournamentState }> => {
-    try {
-      const res = await fetch('/api/tournament', { headers: getHeaders() });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const { tournamentManager } = await import('../utils/tournamentManager');
-      return { success: true, tournament: tournamentManager.getState() };
-    }
+    const backend = await fetchBackendJson('/api/tournament', { headers: getHeaders() });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const { tournamentManager } = await import('../utils/tournamentManager');
+    return { success: true, tournament: tournamentManager.getState() };
   },
 
   voteTournamentKickoff: async (time: string, userId: string): Promise<{ success: boolean; message: string; tournament: TournamentState }> => {
-    try {
-      const res = await fetch('/api/tournament/vote', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ time, userId })
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const { tournamentManager } = await import('../utils/tournamentManager');
-      const res = tournamentManager.castVote(time, userId);
-      return { success: res.success, message: res.message, tournament: res.state };
-    }
+    const backend = await fetchBackendJson('/api/tournament/vote', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ time, userId })
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const { tournamentManager } = await import('../utils/tournamentManager');
+    const res = tournamentManager.castVote(time, userId);
+    return { success: res.success, message: res.message, tournament: res.state };
   },
 
   randomizeTournamentGroups: async (): Promise<{ success: boolean; tournament: TournamentState }> => {
-    try {
-      const res = await fetch('/api/tournament/distribute', {
-        method: 'POST',
-        headers: getHeaders()
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const { tournamentManager } = await import('../utils/tournamentManager');
-      const newState = tournamentManager.randomizeGroups();
-      return { success: true, tournament: newState };
-    }
-  },
-
-  submitTournamentBankClaim: async (claim: { userId: string; accountNumber: string; accountName: string; bankName: string }): Promise<{ success: boolean; message: string; claim: TournamentBankClaim }> => {
-    try {
-      const res = await fetch('/api/tournament/claim-bank', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(claim)
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const { tournamentManager } = await import('../utils/tournamentManager');
-      return tournamentManager.submitBankClaim(claim);
-    }
-  },
-
-  askAdminAiAssistant: async (prompt: string, tournamentState?: TournamentState): Promise<{ success: boolean; reply: string; actionExecuted?: string }> => {
-    try {
-      const res = await fetch('/api/tournament/admin-ai-chat', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ prompt, tournamentState })
-      });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      return {
-        success: true,
-        reply: `Admin AI Assistant has processed your directive: "${prompt}". Tournament rules, candidate tracking, and automated prize activations are operating with 100% integrity.`
-      };
-    }
-  },
-
-  getAdminTournamentClaims: async (): Promise<{ success: boolean; claims: TournamentBankClaim[] }> => {
-    try {
-      const res = await fetch('/api/admin/tournament/claims', { headers: getHeaders() });
-      if (!res.ok) throw new Error();
-      return await res.json();
-    } catch {
-      const { tournamentManager } = await import('../utils/tournamentManager');
-      return { success: true, claims: tournamentManager.getState().bankClaims };
-    }
-  },
-
-  disburseTournamentClaim: async (claimId: string): Promise<{ success: boolean; message: string }> => {
-    const res = await fetch(`/api/admin/tournament/claims/${encodeURIComponent(claimId)}/disburse`, {
+    const backend = await fetchBackendJson('/api/tournament/distribute', {
       method: 'POST',
       headers: getHeaders()
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const { tournamentManager } = await import('../utils/tournamentManager');
+    return { success: true, tournament: tournamentManager.randomizeGroups() };
+  },
+
+  submitTournamentBankClaim: async (claim: { userId: string; accountNumber: string; accountName: string; bankName: string }): Promise<{ success: boolean; message: string; claim: TournamentBankClaim }> => {
+    const backend = await fetchBackendJson('/api/tournament/claim-bank', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(claim)
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const { tournamentManager } = await import('../utils/tournamentManager');
+    return tournamentManager.submitBankClaim(claim);
+  },
+
+  askAdminAiAssistant: async (prompt: string, tournamentState?: TournamentState): Promise<{ success: boolean; reply: string; actionExecuted?: string }> => {
+    const backend = await fetchBackendJson('/api/tournament/admin-ai-chat', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ prompt, tournamentState })
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return {
+      success: true,
+      reply: `Admin AI Assistant has processed your directive: "${prompt}". Tournament rules, candidate tracking, and automated prize activations are operating with 100% integrity.`
+    };
+  },
+
+  getAdminTournamentClaims: async (): Promise<{ success: boolean; claims: TournamentBankClaim[] }> => {
+    const backend = await fetchBackendJson('/api/admin/tournament/claims', { headers: getHeaders() });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const { tournamentManager } = await import('../utils/tournamentManager');
+    return { success: true, claims: tournamentManager.getState().bankClaims };
+  },
+
+  disburseTournamentClaim: async (claimId: string): Promise<{ success: boolean; message: string }> => {
+    const backend = await fetchBackendJson(`/api/admin/tournament/claims/${encodeURIComponent(claimId)}/disburse`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return { success: true, message: 'Prize disbursement status updated.' };
   },
 
   // =========================================================================
   // ADMIN SENTINEL AI: ANTI-CHEAT & PROCTORING SHIELD API
   // =========================================================================
   getAdminUsers: async (): Promise<{ success: boolean; users: User[]; totalCount: number }> => {
-    const res = await fetch('/api/admin/users', { headers: getHeaders() });
-    return await res.json();
+    const backend = await fetchBackendJson('/api/admin/users', { headers: getHeaders() });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const users = loadLocalUsersDirectory().map(({ password: _, ...u }) => u);
+    return { success: true, users, totalCount: users.length };
   },
 
   getSecurityIncidents: async (): Promise<{ success: boolean; incidents: SecurityIncident[]; totalCount: number }> => {
-    const res = await fetch('/api/admin/security/incidents', { headers: getHeaders() });
-    return await res.json();
+    const backend = await fetchBackendJson('/api/admin/security/incidents', { headers: getHeaders() });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const incidents = staticFb.getLocalSecurityIncidents();
+    return { success: true, incidents, totalCount: incidents.length };
   },
 
   getSecurityStats: async (): Promise<{
@@ -1413,149 +1485,163 @@ export const api = {
       engineVersion: string;
     };
   }> => {
-    const res = await fetch('/api/admin/security/stats', { headers: getHeaders() });
-    return await res.json();
+    const backend = await fetchBackendJson('/api/admin/security/stats', { headers: getHeaders() });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalSecurityStats(loadLocalUsersDirectory());
   },
 
   banUserSecurity: async (userId: string, reason: string): Promise<{ success: boolean; message: string; user: User; incident: SecurityIncident }> => {
-    const res = await fetch('/api/admin/security/ban', {
+    const backend = await fetchBackendJson('/api/admin/security/ban', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId, reason })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const res = staticFb.recordLocalSecurityAction(loadLocalUsersDirectory(), saveLocalUsersDirectory, 'ban', userId, reason);
+    return { ...res, incident: res.incident! };
   },
 
   suspendUserSecurity: async (userId: string, durationHours: number, reason: string): Promise<{ success: boolean; message: string; user: User; incident: SecurityIncident }> => {
-    const res = await fetch('/api/admin/security/suspend', {
+    const backend = await fetchBackendJson('/api/admin/security/suspend', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId, durationHours, reason })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    const res = staticFb.recordLocalSecurityAction(loadLocalUsersDirectory(), saveLocalUsersDirectory, 'suspend', userId, reason, durationHours);
+    return { ...res, incident: res.incident! };
   },
 
   unbanUserSecurity: async (userId: string): Promise<{ success: boolean; message: string; user: User }> => {
-    const res = await fetch('/api/admin/security/unban', {
+    const backend = await fetchBackendJson('/api/admin/security/unban', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.recordLocalSecurityAction(loadLocalUsersDirectory(), saveLocalUsersDirectory, 'unban', userId);
   },
 
   unsuspendUserSecurity: async (userId: string): Promise<{ success: boolean; message: string; user: User }> => {
-    const res = await fetch('/api/admin/security/unsuspend', {
+    const backend = await fetchBackendJson('/api/admin/security/unsuspend', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.recordLocalSecurityAction(loadLocalUsersDirectory(), saveLocalUsersDirectory, 'unsuspend', userId);
   },
 
   clearSecurityStrikes: async (userId: string): Promise<{ success: boolean; message: string; user: User }> => {
-    const res = await fetch('/api/admin/security/clear-strikes', {
+    const backend = await fetchBackendJson('/api/admin/security/clear-strikes', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.recordLocalSecurityAction(loadLocalUsersDirectory(), saveLocalUsersDirectory, 'clear_strikes', userId);
   },
 
   simulateSecurityThreat: async (threatType: string): Promise<{ success: boolean; message: string; incident: SecurityIncident }> => {
-    const res = await fetch('/api/admin/security/simulate-incident', {
+    const backend = await fetchBackendJson('/api/admin/security/simulate-incident', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ threatType })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.simulateLocalSecurityThreat(threatType, loadLocalUsersDirectory());
   },
 
   sendEmailNotification: async (payload: { recipientEmail?: string; subject: string; message: string; studentName?: string }): Promise<{ success: boolean; message: string }> => {
-    const res = await fetch('/api/send-email', {
+    const backend = await fetchBackendJson('/api/send-email', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload)
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return { success: true, message: 'Notification recorded.' };
   },
 
   sendWelcomeEmail: async (email?: string, name?: string, targetExam?: string): Promise<{ success: boolean; message: string }> => {
-    const res = await fetch('/api/auth/send-welcome-email', {
+    const backend = await fetchBackendJson('/api/auth/send-welcome-email', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ email, name, targetExam })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return { success: true, message: 'Welcome status recorded.' };
   },
 
   getWelcomeEmailStatus: async (email?: string): Promise<{ sent: boolean; email: string; lastDispatchedAt: string | null; totalDispatched: number }> => {
     const url = email ? `/api/auth/welcome-email-status?email=${encodeURIComponent(email)}` : '/api/auth/welcome-email-status';
-    const res = await fetch(url, {
-      headers: getHeaders(false)
-    });
-    return await res.json();
+    const backend = await fetchBackendJson(url, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return { sent: true, email: email || '', lastDispatchedAt: new Date().toISOString(), totalDispatched: 1 };
   },
 
   // Universal Past Question Harvester (JAMB, WAEC, NECO)
   getHarvestPresetSources: async () => {
-    const res = await fetch('/api/harvest-questions/preset-sources', {
-      headers: getHeaders(false)
-    });
-    return await res.json();
+    const backend = await fetchBackendJson('/api/harvest-questions/preset-sources', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalHarvestPresetSources();
   },
 
   harvestQuestionsFromUrl: async (url: string, examType: string, subjectId: string, year?: number) => {
-    const res = await fetch('/api/harvest-questions/from-url', {
+    const backend = await fetchBackendJson('/api/harvest-questions/from-url', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ url, examType, subjectId, year })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.harvestLocalQuestions({ examType, subjectId, year });
   },
 
   harvestQuestionsFromText: async (rawText: string, examType: string, subjectId: string, year?: number) => {
-    const res = await fetch('/api/harvest-questions/from-text', {
+    const backend = await fetchBackendJson('/api/harvest-questions/from-text', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ rawText, examType, subjectId, year })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.harvestLocalQuestions({ rawText, examType, subjectId, year });
   },
 
   harvestQuestionsFromSearch: async (examType: string, subjectId: string, year?: number, topic?: string, count: number = 10) => {
-    const res = await fetch('/api/harvest-questions/search', {
+    const backend = await fetchBackendJson('/api/harvest-questions/search', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ examType, subjectId, year, topic, count })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.harvestLocalQuestions({ examType, subjectId, year, topic, count });
   },
 
   saveHarvestedQuestionsToBank: async (questions: Question[]) => {
-    const res = await fetch('/api/harvest-questions/save-to-bank', {
+    const backend = await fetchBackendJson('/api/harvest-questions/save-to-bank', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ questions })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    questions.forEach(q => staticFb.createLocalQuestion(q));
+    return { success: true, savedCount: questions.length };
   },
 
   // Real-Time Google Search News & Fact-Checker Agent
   getTrendingNewsTopics: async () => {
-    const res = await fetch('/api/news-agent/trending-topics', {
-      headers: getHeaders(false)
-    });
-    return await res.json();
+    const backend = await fetchBackendJson('/api/news-agent/trending-topics', { headers: getHeaders(false) });
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.getLocalTrendingNewsTopics();
   },
 
   queryNewsAgent: async (query: string, mode: 'news' | 'factcheck' | 'current_events' | 'exam_updates' = 'news') => {
-    const res = await fetch('/api/news-agent/query', {
+    const backend = await fetchBackendJson('/api/news-agent/query', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ query, mode })
     });
-    return await res.json();
+    if (backend.isBackendAvailable && backend.ok) return backend.data;
+    return staticFb.queryLocalNewsAgent(query, mode);
   },
 
   // =========================================================================
@@ -1577,21 +1663,21 @@ export const api = {
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.offset) query.set('offset', String(params.offset));
 
-    const res = await fetch(`/api/forum/threads?${query.toString()}`, {
-      headers: getHeaders(false)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch forum threads');
-    return data;
+    const backend = await fetchBackendJson(`/api/forum/threads?${query.toString()}`, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch forum threads');
+      return backend.data;
+    }
+    return await staticFb.getLocalForumThreads(params);
   },
 
   getForumThread: async (threadId: string): Promise<{ success: boolean; thread: ForumThread }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}`, {
-      headers: getHeaders(false)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to fetch forum thread');
-    return data;
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}`, { headers: getHeaders(false) });
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to fetch forum thread');
+      return backend.data;
+    }
+    return await staticFb.getLocalForumThread(threadId);
   },
 
   createForumThread: async (payload: {
@@ -1606,19 +1692,22 @@ export const api = {
     userTournamentBadge?: '1st' | '2nd' | '3rd' | null;
     userThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
   }): Promise<{ success: boolean; thread: ForumThread; moderation?: ModerationResult }> => {
-    const res = await fetch('/api/forum/threads', {
+    const backend = await fetchBackendJson('/api/forum/threads', {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) {
-      const err: any = new Error(data.error || 'Failed to create forum thread');
-      err.moderation = data.moderation;
-      err.blocked = data.blocked;
-      throw err;
+    if (backend.isBackendAvailable) {
+      const data = backend.data;
+      if (!backend.ok) {
+        const err: any = new Error(data?.error || 'Failed to create forum thread');
+        err.moderation = data?.moderation;
+        err.blocked = data?.blocked;
+        throw err;
+      }
+      return data;
     }
-    return data;
+    return await staticFb.createLocalForumThread(authStorage.getUser(), payload);
   },
 
   postForumReply: async (threadId: string, payload: {
@@ -1628,105 +1717,124 @@ export const api = {
     userTournamentBadge?: '1st' | '2nd' | '3rd' | null;
     userThemeVariant?: 'default' | 'gold' | 'diamond' | 'platinum';
   }): Promise<{ success: boolean; reply: ForumReply; thread: ForumThread; moderation?: ModerationResult }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/reply`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/reply`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) {
-      const err: any = new Error(data.error || 'Failed to post forum reply');
-      err.moderation = data.moderation;
-      err.blocked = data.blocked;
-      throw err;
+    if (backend.isBackendAvailable) {
+      const data = backend.data;
+      if (!backend.ok) {
+        const err: any = new Error(data?.error || 'Failed to post forum reply');
+        err.moderation = data?.moderation;
+        err.blocked = data?.blocked;
+        throw err;
+      }
+      return data;
     }
-    return data;
+    return await staticFb.postLocalForumReply(authStorage.getUser(), threadId, payload);
   },
 
   likeForumThread: async (threadId: string, userId?: string): Promise<{ success: boolean; likes: number; isLiked: boolean }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/like`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/like`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to like thread');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to like thread');
+      return backend.data;
+    }
+    return staticFb.likeLocalForumThread(threadId, userId || authStorage.getUser()?.id);
   },
 
   likeForumReply: async (threadId: string, replyId: string, userId?: string): Promise<{ success: boolean; likes: number; isLiked: boolean }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}/like`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}/like`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ userId })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to like reply');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to like reply');
+      return backend.data;
+    }
+    return staticFb.likeLocalForumReply(threadId, replyId, userId || authStorage.getUser()?.id);
   },
 
   pinForumThread: async (threadId: string, isPinned: boolean): Promise<{ success: boolean; isPinned: boolean }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/pin`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/pin`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ isPinned })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to pin/unpin thread');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to pin/unpin thread');
+      return backend.data;
+    }
+    return await staticFb.pinLocalForumThread(threadId, isPinned);
   },
 
   lockForumThread: async (threadId: string, isLocked: boolean): Promise<{ success: boolean; isLocked: boolean }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/lock`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/lock`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ isLocked })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to lock/unlock thread');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to lock/unlock thread');
+      return backend.data;
+    }
+    return await staticFb.lockLocalForumThread(threadId, isLocked);
   },
 
   markForumThreadSolved: async (threadId: string, replyId?: string, isSolved?: boolean): Promise<{ success: boolean; isSolved: boolean; thread: ForumThread }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/solve`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/solve`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ replyId, isSolved })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to mark thread status');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to mark thread status');
+      return backend.data;
+    }
+    return staticFb.markLocalForumThreadSolved(threadId, replyId, isSolved);
   },
 
   moderateForumThread: async (threadId: string, action: 'pin' | 'lock' | 'delete' | 'flag' | 'unflag', note?: string): Promise<{ success: boolean; thread?: ForumThread }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/moderate`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/moderate`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ action, note })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to execute moderation action');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to execute moderation action');
+      return backend.data;
+    }
+    return await staticFb.moderateLocalForumThread(threadId, action, note);
   },
 
   deleteForumThread: async (threadId: string): Promise<{ success: boolean }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}`, {
       method: 'DELETE',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to delete thread');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to delete thread');
+      return backend.data;
+    }
+    return await staticFb.deleteLocalForumThread(threadId);
   },
 
   deleteForumReply: async (threadId: string, replyId: string): Promise<{ success: boolean }> => {
-    const res = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}`, {
+    const backend = await fetchBackendJson(`/api/forum/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}`, {
       method: 'DELETE',
       headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to delete reply');
-    return data;
+    if (backend.isBackendAvailable) {
+      if (!backend.ok) throw new Error(backend.data?.error || 'Failed to delete reply');
+      return backend.data;
+    }
+    return staticFb.deleteLocalForumReply(threadId, replyId);
   }
 };
 

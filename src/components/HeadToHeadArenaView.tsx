@@ -30,8 +30,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { User, Question } from '../types';
+import { User, Question, VerifiedArenaMatch } from '../types';
 import { api, authStorage } from '../services/api';
+import { getAllLocalQuestionPool, saveLocalArenaMatch, LOCAL_USERS_DIRECTORY_KEY } from '../utils/staticBackendFallback';
 import { MatchVerificationModal } from './MatchVerificationModal';
 import { TournamentCountdown } from './TournamentCountdown';
 
@@ -137,9 +138,20 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [arenaTabSwitchCount, setArenaTabSwitchCount] = useState<number>(0);
   const [showArenaTabWarning, setShowArenaTabWarning] = useState<boolean>(false);
+  const [isLocalArenaMode, setIsLocalArenaMode] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const localQuestionsRef = useRef<Question[]>([]);
+  const localBotIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const localMatchIdRef = useRef<string | null>(null);
+  const localMyScoreRef = useRef<number>(0);
+  const localOpponentScoreRef = useRef<number>(0);
+  const localOpponentQRef = useRef<number>(0);
+  const localMyFinishedRef = useRef<boolean>(false);
+  const localOpponentFinishedRef = useRef<boolean>(false);
+  const localMatchEndedRef = useRef<boolean>(false);
+  const localOpponentRef = useRef<{ id: string; name: string } | null>(null);
 
   // Check if current user has an active 25% discount
   const hasActiveDiscount = !!(
@@ -215,17 +227,45 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
     } catch {}
   };
 
-  // Connect to WebSocket Server
+  // Connect to WebSocket Server (with automatic Static/Netlify AI Arena fallback)
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
-    const ws = new WebSocket(wsUrl);
-    socketRef.current = ws;
+    let opened = false;
+    let disposed = false;
+
+    const activateLocalArena = () => {
+      if (disposed || opened) return;
+      setIsLocalArenaMode(true);
+      setIsConnected(true);
+    };
+
+    // If WebSocket cannot connect (e.g. static Netlify hosting), switch smoothly to AI Arena Mode
+    const wsFallbackTimer = setTimeout(activateLocalArena, 1800);
+
+    let ws: WebSocket | null = null;
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+      ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
+    } catch {
+      activateLocalArena();
+    }
+
+    if (!ws) {
+      return () => {
+        disposed = true;
+        clearTimeout(wsFallbackTimer);
+      };
+    }
 
     ws.onopen = () => {
+      if (disposed) return;
+      opened = true;
+      clearTimeout(wsFallbackTimer);
+      setIsLocalArenaMode(false);
       setIsConnected(true);
       // Authenticate
-      ws.send(JSON.stringify({
+      ws!.send(JSON.stringify({
         type: 'auth',
         userId: user?.id,
         userName: user?.name || user?.email?.split('@')[0] || 'Scholar',
@@ -238,6 +278,10 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
       if (urlRoom && !hasActiveDiscount) {
         setJoinRoomInput(urlRoom.toUpperCase());
       }
+    };
+
+    ws.onerror = () => {
+      activateLocalArena();
     };
 
     ws.onmessage = (event) => {
@@ -386,12 +430,21 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
     };
 
     ws.onclose = () => {
-      setIsConnected(false);
+      if (!opened) {
+        activateLocalArena();
+      } else {
+        setIsConnected(false);
+      }
     };
 
     return () => {
+      disposed = true;
+      clearTimeout(wsFallbackTimer);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      ws.close();
+      if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+      try {
+        ws?.close();
+      } catch {}
     };
   }, [user?.id]);
 
@@ -424,6 +477,221 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
     };
   }, [arenaState]);
 
+  const isAdmin = user?.role === 'admin';
+
+  const finishLocalArenaMatch = (reason: 'both_finished' | 'time_up' | 'forfeit') => {
+    if (localMatchEndedRef.current) return;
+    localMatchEndedRef.current = true;
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+
+    const myS = localMyScoreRef.current;
+    const oppS = localOpponentScoreRef.current;
+    const bot = localOpponentRef.current || { id: 'ai_scholar', name: 'Chinedu (UI Aspirant)' };
+    const tie = reason !== 'forfeit' && myS === oppS;
+    const isWinner = reason !== 'forfeit' && myS > oppS;
+    const myId = user?.id || 'local_scholar';
+    const myName = user?.name || user?.email?.split('@')[0] || 'Scholar';
+    const winnerId = tie ? null : isWinner ? myId : bot.id;
+    const winnerName = tie ? null : isWinner ? myName : bot.name;
+
+    const mId = localMatchIdRef.current || `match_local_${Date.now()}`;
+    const verificationCode = `SN-ARENA-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+    const verificationHash = `SIG-${Date.now().toString(16).toUpperCase()}`;
+    const discountExpiresAt = isWinner ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+
+    // Persist winner/match stats & 25% discount to authStorage + local user directory
+    const cachedUser = authStorage.getUser();
+    if (cachedUser) {
+      const updatedUser: User = {
+        ...cachedUser,
+        arenaWins: (cachedUser.arenaWins || 0) + (isWinner ? 1 : 0),
+        arenaLosses: (cachedUser.arenaLosses || 0) + (!isWinner && !tie ? 1 : 0),
+        arenaMatches: (cachedUser.arenaMatches || 0) + 1,
+        ...(discountExpiresAt ? { arenaDiscountExpiresAt: discountExpiresAt } : {})
+      };
+      authStorage.setUser(updatedUser);
+      try {
+        const rawDir = localStorage.getItem(LOCAL_USERS_DIRECTORY_KEY);
+        if (rawDir) {
+          const dir = JSON.parse(rawDir);
+          if (Array.isArray(dir)) {
+            const idx = dir.findIndex((u: any) => u.id === cachedUser.id || u.email === cachedUser.email);
+            if (idx >= 0) {
+              dir[idx] = { ...dir[idx], ...updatedUser };
+              localStorage.setItem(LOCAL_USERS_DIRECTORY_KEY, JSON.stringify(dir));
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Store verifiable certificate record
+    const myAnsweredCount = localQuestionsRef.current.length;
+    const verifiedRecord: VerifiedArenaMatch = {
+      matchId: mId,
+      verificationCode,
+      verificationHash,
+      playedAt: new Date().toISOString(),
+      durationSeconds: 60,
+      isAiMatch: true,
+      tie,
+      winnerId,
+      winnerName,
+      winnerScore: Math.max(myS, oppS),
+      loserScore: Math.min(myS, oppS),
+      player1: {
+        userId: myId,
+        name: myName,
+        score: myS,
+        correctCount: Math.round(myS / 10),
+        totalAnswered: myAnsweredCount,
+        isWinner
+      },
+      player2: {
+        userId: bot.id,
+        name: bot.name,
+        score: oppS,
+        correctCount: Math.round(oppS / 10),
+        totalAnswered: localOpponentQRef.current,
+        isWinner: !tie && !isWinner
+      },
+      prizeClaimStatus: isWinner ? '7-Day 25% VIP Discount Unlocked' : 'Standard Participation',
+      statusText: tie ? 'Honorable Draw' : `${winnerName} Won (${Math.max(myS, oppS)} - ${Math.min(myS, oppS)})`
+    };
+    saveLocalArenaMatch(verifiedRecord);
+
+    const review: QuestionReview[] = localQuestionsRef.current.map((q) => ({
+      id: q.id,
+      question: q.question,
+      options: normalizeOptions(q.options),
+      correctOption: q.correctOption,
+      explanation: q.explanation,
+      subjectName: q.subjectName,
+      topic: q.topic
+    }));
+
+    setMatchResult({
+      winnerId,
+      tie,
+      reason,
+      winnerName,
+      discountExpiresAt,
+      questionsReview: review,
+      verificationCode,
+      verificationHash
+    });
+    setArenaState('finished');
+
+    if (isWinner) {
+      playSfx('victory');
+      confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+    }
+    if (onRefreshUser) onRefreshUser();
+  };
+
+  const startLocalArenaMatch = (isAdminTestBot = false) => {
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+
+    const allPool = getAllLocalQuestionPool();
+    const levelPool = user?.educationLevel
+      ? allPool.filter(q => !q.educationLevel || q.educationLevel === user.educationLevel)
+      : allPool;
+    const sourcePool = levelPool.length >= 10 ? levelPool : allPool;
+    const shuffled = [...sourcePool].sort(() => Math.random() - 0.5).slice(0, 10);
+
+    const scholars = [
+      'Chinedu (UI Aspirant)',
+      'Amina (ABU Medicine)',
+      'Tunde (UNILAG Eng.)',
+      'Zainab (OAU Law)',
+      'Kelechi (UNN Scholar)'
+    ];
+    const botOpponent = {
+      id: 'ai_scholar_bot',
+      name: isAdminTestBot ? 'StudyNaija AI Bot 🤖' : scholars[Math.floor(Math.random() * scholars.length)]
+    };
+
+    const mId = `match_local_${Date.now()}`;
+    localQuestionsRef.current = shuffled;
+    localMatchIdRef.current = mId;
+    localMyScoreRef.current = 0;
+    localOpponentScoreRef.current = 0;
+    localOpponentQRef.current = 0;
+    localMyFinishedRef.current = false;
+    localOpponentFinishedRef.current = false;
+    localMatchEndedRef.current = false;
+    localOpponentRef.current = botOpponent;
+
+    setLockError(null);
+    setMatchId(mId);
+    setOpponent(botOpponent);
+    setArenaState('starting');
+    setCountdown(3);
+    playSfx('whistle');
+
+    let count = 3;
+    const kickoffInterval = setInterval(() => {
+      count -= 1;
+      setCountdown(count);
+      if (count <= 0) {
+        clearInterval(kickoffInterval);
+        const strippedQuestions: MatchQuestion[] = shuffled.map(q => ({
+          id: q.id,
+          question: q.question,
+          options: normalizeOptions(q.options),
+          subjectName: q.subjectName,
+          topic: q.topic,
+          examType: q.examType,
+          year: q.year
+        }));
+
+        setQuestions(strippedQuestions);
+        setCurrentQIndex(0);
+        setMyScore(0);
+        setMyAnswers({});
+        setOpponentScore(0);
+        setOpponentQIndex(0);
+        setOpponentIsFinished(false);
+        setIsFinishedWaiting(false);
+        setTimeLeft(60);
+        setArenaState('playing');
+
+        timerIntervalRef.current = setInterval(() => {
+          setTimeLeft(prev => {
+            if (prev <= 1) {
+              finishLocalArenaMatch('time_up');
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        // Adaptive AI Scholar opponent ticks
+        localBotIntervalRef.current = setInterval(() => {
+          if (localMatchEndedRef.current || localOpponentFinishedRef.current) return;
+          localOpponentQRef.current += 1;
+          const gotItRight = Math.random() < (isAdminTestBot ? 0.55 : 0.65);
+          if (gotItRight) {
+            localOpponentScoreRef.current += 10;
+            setOpponentScore(localOpponentScoreRef.current);
+          }
+          setOpponentQIndex(localOpponentQRef.current);
+
+          if (localOpponentQRef.current >= shuffled.length) {
+            localOpponentFinishedRef.current = true;
+            setOpponentIsFinished(true);
+            if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+            if (localMyFinishedRef.current) {
+              setTimeout(() => finishLocalArenaMatch('both_finished'), 500);
+            }
+          }
+        }, 4200);
+      }
+    }, 1000);
+  };
+
   // Join public queue
   const handleFindChallenger = () => {
     if (hasActiveDiscount) {
@@ -432,8 +700,12 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
       );
       return;
     }
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
       socketRef.current.send(JSON.stringify({ type: 'queue_join' }));
+    } else {
+      setArenaState('queue');
+      setLockError(null);
+      setTimeout(() => startLocalArenaMatch(false), 1200);
     }
   };
 
@@ -451,8 +723,10 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
       setLockError('You already have an active 25% discount! You cannot duel until it expires in 7 days.');
       return;
     }
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
       socketRef.current.send(JSON.stringify({ type: 'create_room' }));
+    } else {
+      setLockError('Live classmate room codes require a real-time WebSocket server. Click "PLAY QUICK MATCH" above to duel an adaptive Nigerian AI Scholar right now for your 25% VIP discount!');
     }
   };
 
@@ -463,11 +737,13 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
       setLockError('You already have an active 25% discount! You cannot duel until it expires in 7 days.');
       return;
     }
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
       socketRef.current.send(JSON.stringify({
         type: 'join_room',
         roomCode: joinRoomInput.trim().toUpperCase()
       }));
+    } else {
+      setLockError('Live classmate room codes require a real-time WebSocket server. Click "PLAY QUICK MATCH" above to start an AI Scholar Arena duel right now!');
     }
   };
 
@@ -477,7 +753,7 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
     const currentQ = questions[currentQIndex];
     if (!currentQ) return;
 
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
       socketRef.current.send(JSON.stringify({
         type: 'submit_answer',
         matchId,
@@ -485,20 +761,65 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
         selectedOption: optionLabel,
         questionIndex: currentQIndex
       }));
+      return;
+    }
+
+    // Local AI Arena answer evaluation
+    const fullQ = localQuestionsRef.current[currentQIndex];
+    const isCorrect = fullQ ? optionLabel === fullQ.correctOption : false;
+    if (isCorrect) {
+      localMyScoreRef.current += 10;
+      playSfx('correct');
+    } else {
+      playSfx('wrong');
+    }
+
+    setMyScore(localMyScoreRef.current);
+    setMyAnswers(prev => ({
+      ...prev,
+      [currentQ.id]: { option: optionLabel, isCorrect }
+    }));
+
+    const nextIdx = currentQIndex + 1;
+    setCurrentQIndex(nextIdx);
+    if (nextIdx >= localQuestionsRef.current.length) {
+      localMyFinishedRef.current = true;
+      setIsFinishedWaiting(true);
+      if (localOpponentFinishedRef.current) {
+        setTimeout(() => finishLocalArenaMatch('both_finished'), 500);
+      } else {
+        // Fast-forward remaining AI opponent answers smoothly once player completes all 10
+        if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+        localBotIntervalRef.current = setInterval(() => {
+          if (localMatchEndedRef.current) return;
+          if (localOpponentQRef.current >= localQuestionsRef.current.length) {
+            localOpponentFinishedRef.current = true;
+            setOpponentIsFinished(true);
+            if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+            setTimeout(() => finishLocalArenaMatch('both_finished'), 450);
+            return;
+          }
+          localOpponentQRef.current += 1;
+          if (Math.random() < 0.65) {
+            localOpponentScoreRef.current += 10;
+            setOpponentScore(localOpponentScoreRef.current);
+          }
+          setOpponentQIndex(localOpponentQRef.current);
+        }, 450);
+      }
     }
   };
 
   // Forfeit active match
   const handleForfeit = () => {
-    if (window.confirm('Are you sure you want to forfeit this 1v1 challenge? Your opponent will win by default.')) {
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ type: 'leave_match' }));
-      }
-      setArenaState('lobby');
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
+      socketRef.current.send(JSON.stringify({ type: 'leave_match' }));
     }
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (localBotIntervalRef.current) clearInterval(localBotIntervalRef.current);
+    localMatchEndedRef.current = true;
+    setArenaState('lobby');
   };
-
-  const isAdmin = user?.role === 'admin';
 
   // Admin AI Match Handler
   const handlePlayAiBot = () => {
@@ -506,17 +827,40 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
       setLockError('AI test mode is restricted to administrator accounts.');
       return;
     }
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
       setLockError(null);
       socketRef.current.send(JSON.stringify({ type: 'start_ai_match' }));
+    } else {
+      startLocalArenaMatch(true);
     }
   };
 
   // Admin Reset Discount Handler
   const handleAdminResetDiscount = () => {
     if (!isAdmin) return;
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && !isLocalArenaMode) {
       socketRef.current.send(JSON.stringify({ type: 'admin_reset_discount' }));
+      setLockError(null);
+      if (onRefreshUser) onRefreshUser();
+    } else {
+      const cachedUser = authStorage.getUser();
+      if (cachedUser) {
+        const { arenaDiscountExpiresAt: _, ...rest } = cachedUser;
+        authStorage.setUser(rest as User);
+        try {
+          const rawDir = localStorage.getItem(LOCAL_USERS_DIRECTORY_KEY);
+          if (rawDir) {
+            const dir = JSON.parse(rawDir);
+            if (Array.isArray(dir)) {
+              const idx = dir.findIndex((u: any) => u.id === cachedUser.id || u.email === cachedUser.email);
+              if (idx >= 0) {
+                delete dir[idx].arenaDiscountExpiresAt;
+                localStorage.setItem(LOCAL_USERS_DIRECTORY_KEY, JSON.stringify(dir));
+              }
+            }
+          }
+        } catch {}
+      }
       setLockError(null);
       if (onRefreshUser) onRefreshUser();
     }
@@ -552,9 +896,15 @@ export const HeadToHeadArenaView: React.FC<HeadToHeadArenaViewProps> = ({
           <div className="flex items-center gap-2.5">
             {/* Live Online Counter */}
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-xs text-slate-300">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
-              <span className="font-semibold text-white">{onlineCount}</span>
-              <span className="text-[11px] text-slate-400">Online in NG</span>
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+              {isLocalArenaMode ? (
+                <span className="font-semibold text-emerald-300 text-[11px]">AI Arena Mode</span>
+              ) : (
+                <>
+                  <span className="font-semibold text-white">{onlineCount}</span>
+                  <span className="text-[11px] text-slate-400">Online in NG</span>
+                </>
+              )}
             </div>
 
             {/* Sound Toggle */}
